@@ -3,6 +3,8 @@ DGAI M4b — Supervised Fine-Tuning (SFT) Corpus, Metadata & Decontamination (DG
 """
 
 import hashlib
+import json
+import os
 import re
 from typing import List, Dict, Any, Set, Tuple
 
@@ -37,6 +39,25 @@ class SFTExample:
                 "hash": self.compute_hash()
             }
         }
+
+
+def load_sft_corpus(filepath: str = "data/sft_corpus.json") -> List[SFTExample]:
+    if not os.path.exists(filepath):
+        return []
+    with open(filepath, 'r', encoding='utf-8') as f:
+        raw_list = json.load(f)
+
+    examples = []
+    for raw in raw_list:
+        examples.append(SFTExample(
+            example_id=raw.get("example_id", "unk"),
+            conversation=raw.get("conversation", []),
+            source=raw.get("source", "unknown"),
+            domain=raw.get("domain", "general"),
+            quality_score=raw.get("quality_score", 1.0),
+            license_type=raw.get("license_type", "open")
+        ))
+    return examples
 
 
 def deduplicate_examples(examples: List[SFTExample]) -> List[SFTExample]:

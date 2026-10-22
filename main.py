@@ -7,11 +7,11 @@ import os
 
 from dgai.constitution import get_constitution_summary, check_normative_conflict
 from dgai.m4a_format import validate_conversation, compute_loss_mask, format_tool_call
-from dgai.m4b_sft import SFTExample, deduplicate_examples, decontaminate
+from dgai.m4b_sft import SFTExample, load_sft_corpus, deduplicate_examples, decontaminate
 from dgai.m4c_constitutional import constitutional_review
-from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking
+from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking, load_preference_pairs
 from dgai.m4e_rewards import verify_math_reward, verify_format_reward, verify_code_reward
-from dgai.m4f_calibration import calculate_ece, evaluate_sycophancy_test_pair, evaluate_calibrated_abstention
+from dgai.m4f_calibration import calculate_ece, evaluate_sycophancy_test_pair, evaluate_calibrated_abstention, load_sycophancy_benchmark, load_ece_benchmark
 
 app = Flask(__name__)
 
@@ -179,6 +179,16 @@ def api_m4a_format():
     })
 
 
+@app.route('/api/v1/m4b/sft/corpus', methods=['GET'])
+def api_m4b_sft_corpus():
+    examples = load_sft_corpus()
+    return jsonify({
+        "status": "success",
+        "count": len(examples),
+        "corpus": [ex.to_dict() for ex in examples]
+    })
+
+
 @app.route('/api/v1/m4b/sft/decontaminate', methods=['POST'])
 def api_m4b_decontaminate():
     data = request.json or {}
@@ -186,14 +196,17 @@ def api_m4b_decontaminate():
     eval_prompts = data.get("eval_benchmark_prompts", [])
     threshold = data.get("similarity_threshold", 0.8)
 
-    sft_objs = []
-    for idx, raw in enumerate(raw_examples):
-        sft_objs.append(SFTExample(
-            example_id=raw.get("example_id", f"ex_{idx}"),
-            conversation=raw.get("conversation", []),
-            source=raw.get("source", "unknown"),
-            domain=raw.get("domain", "general")
-        ))
+    if not raw_examples:
+        sft_objs = load_sft_corpus()
+    else:
+        sft_objs = []
+        for idx, raw in enumerate(raw_examples):
+            sft_objs.append(SFTExample(
+                example_id=raw.get("example_id", f"ex_{idx}"),
+                conversation=raw.get("conversation", []),
+                source=raw.get("source", "unknown"),
+                domain=raw.get("domain", "general")
+            ))
 
     deduped = deduplicate_examples(sft_objs)
     dedup_removed = len(sft_objs) - len(deduped)
@@ -272,14 +285,30 @@ def api_m4e_rewards_verify():
 @app.route('/api/v1/m4f/metrics/ece', methods=['POST'])
 def api_m4f_ece():
     data = request.json or {}
-    confidences = data.get("confidences", [])
-    accuracies = data.get("accuracies", [])
+    confidences = data.get("confidences")
+    accuracies = data.get("accuracies")
     num_bins = data.get("num_bins", 10)
+
+    if confidences is None or accuracies is None:
+        bm = load_ece_benchmark()
+        confidences = bm.get("confidences", [])
+        accuracies = bm.get("accuracies", [])
+        num_bins = bm.get("num_bins", num_bins)
 
     res = calculate_ece(confidences, accuracies, num_bins=num_bins)
     return jsonify({
         "status": "success",
         "metrics": res
+    })
+
+
+@app.route('/api/v1/m4f/sycophancy/benchmark', methods=['GET'])
+def api_m4f_sycophancy_benchmark():
+    bm = load_sycophancy_benchmark()
+    return jsonify({
+        "status": "success",
+        "count": len(bm),
+        "benchmark_items": bm
     })
 
 

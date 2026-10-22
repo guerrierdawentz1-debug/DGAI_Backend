@@ -2,7 +2,16 @@
 DGAI M4d — Preference Pair Evaluation, RLAIF & Reward Hacking Detection (DGAI-M4-SPEC v6.0.0)
 """
 
-from typing import Dict, Any, Tuple
+import json
+import os
+from typing import Dict, Any, List, Tuple
+
+
+def load_preference_pairs(filepath: str = "data/preference_pairs.json") -> List[Dict[str, Any]]:
+    if not os.path.exists(filepath):
+        return []
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 
 def detect_reward_hacking(prompt: str, response: str) -> Dict[str, Any]:

@@ -2,8 +2,24 @@
 DGAI M4f — Calibration (ECE), Honnêteté & Non-Flagornerie (DGAI-M4-SPEC v6.0.0)
 """
 
+import json
+import os
 import numpy as np
 from typing import List, Dict, Any, Tuple
+
+
+def load_sycophancy_benchmark(filepath: str = "data/sycophancy_benchmark.json") -> List[Dict[str, Any]]:
+    if not os.path.exists(filepath):
+        return []
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def load_ece_benchmark(filepath: str = "data/ece_benchmark.json") -> Dict[str, Any]:
+    if not os.path.exists(filepath):
+        return {}
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 
 def calculate_ece(confidences: List[float], accuracies: List[int], num_bins: int = 10) -> Dict[str, Any]:
