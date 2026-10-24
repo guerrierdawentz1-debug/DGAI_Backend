@@ -8,6 +8,7 @@ import os
 from dgai.constitution import get_constitution_summary, check_normative_conflict
 from dgai.m4a_format import validate_conversation, compute_loss_mask, format_tool_call
 from dgai.m4b_sft import SFTExample, load_sft_corpus, deduplicate_examples, decontaminate
+from dgai.m4b_data_generator import generate_sft_batch, DOMAINS
 from dgai.m4c_constitutional import constitutional_review
 from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking, load_preference_pairs
 from dgai.m4e_rewards import verify_math_reward, verify_format_reward, verify_code_reward
@@ -186,6 +187,24 @@ def api_m4b_sft_corpus():
         "status": "success",
         "count": len(examples),
         "corpus": [ex.to_dict() for ex in examples]
+    })
+
+
+@app.route('/api/v1/m4b/sft/generate_corpus', methods=['POST'])
+def api_m4b_sft_generate_corpus():
+    data = request.json or {}
+    start_index = data.get("start_index", 0)
+    count = min(data.get("count", 100), 100000)  # capped batch size per HTTP response
+    domain = data.get("domain")
+
+    generated = generate_sft_batch(start_index=start_index, count=count, domain=domain)
+    return jsonify({
+        "status": "success",
+        "start_index": start_index,
+        "count": len(generated),
+        "total_available_capacity": 1000000,
+        "domains": DOMAINS,
+        "samples": [ex.to_dict() for ex in generated]
     })
 
 
