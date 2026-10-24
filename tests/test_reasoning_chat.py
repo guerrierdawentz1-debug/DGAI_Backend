@@ -40,6 +40,32 @@ def test_chat_pipeline_time_and_math():
     assert "180" in res_math["response"]
 
 
+def test_greetings_and_general_queries():
+    # Greeting "Bonjour" should NOT trigger time tool
+    res_bonjour = chat_assistant_pipeline([{"role": "user", "content": "Bonjour"}])
+    assert res_bonjour["status"] == "success"
+    assert len(res_bonjour["tool_calls"]) == 0
+    assert "Bonjour" in res_bonjour["response"]
+    assert "2026-" not in res_bonjour["response"]
+
+    # "Comment ça va"
+    res_cava = chat_assistant_pipeline([{"role": "user", "content": "Comment ça va"}])
+    assert res_cava["status"] == "success"
+    assert "Je vais très bien" in res_cava["response"]
+    assert "DGAI est à votre disposition. Concernant" not in res_cava["response"]
+
+    # "C'est quoi Google"
+    res_google = chat_assistant_pipeline([{"role": "user", "content": "C'est quoi Google"}])
+    assert res_google["status"] == "success"
+    assert "Google est une entreprise" in res_google["response"]
+
+    # "Code une page en python pour moi"
+    res_code = chat_assistant_pipeline([{"role": "user", "content": "Code une page en python pour moi"}])
+    assert res_code["status"] == "success"
+    assert "python" in res_code["response"].lower()
+    assert "```python" in res_code["response"]
+
+
 def test_chat_api_endpoint(client):
     rv = client.post('/api/v1/chat', json={
         "messages": [
