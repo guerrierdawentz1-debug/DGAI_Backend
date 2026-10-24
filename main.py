@@ -13,6 +13,7 @@ from dgai.m4c_constitutional import constitutional_review
 from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking, load_preference_pairs
 from dgai.m4e_rewards import verify_math_reward, verify_format_reward, verify_code_reward
 from dgai.m4f_calibration import calculate_ece, evaluate_sycophancy_test_pair, evaluate_calibrated_abstention, load_sycophancy_benchmark, load_ece_benchmark
+from dgai.search_engine import search_and_synthesize
 
 app = Flask(__name__)
 
@@ -363,6 +364,19 @@ def api_m4f_sycophancy():
     return jsonify({
         "status": "success",
         "evaluation": res
+    })
+
+
+@app.route('/api/v1/m4f/search_and_synthesize', methods=['POST'])
+def api_m4f_search_and_synthesize():
+    data = request.json or {}
+    query = data.get("query", "")
+    search_results = data.get("search_results")
+
+    res = search_and_synthesize(query, search_results=search_results)
+    return jsonify({
+        "status": "success",
+        "result": res
     })
 
 

@@ -43,21 +43,30 @@ class SFTExample:
 
 
 def load_sft_corpus(filepath: str = "data/sft_corpus.json") -> List[SFTExample]:
-    if not os.path.exists(filepath):
-        return []
-    with open(filepath, 'r', encoding='utf-8') as f:
-        raw_list = json.load(f)
-
     examples = []
-    for raw in raw_list:
-        examples.append(SFTExample(
-            example_id=raw.get("example_id", "unk"),
-            conversation=raw.get("conversation", []),
-            source=raw.get("source", "unknown"),
-            domain=raw.get("domain", "general"),
-            quality_score=raw.get("quality_score", 1.0),
-            license_type=raw.get("license_type", "open")
-        ))
+
+    # Check default file and 5k corpus file
+    files_to_load = [filepath]
+    five_k_path = "data/sft_corpus_5k.json"
+    if os.path.exists(five_k_path) and five_k_path not in files_to_load:
+        files_to_load.append(five_k_path)
+
+    for fpath in files_to_load:
+        if not os.path.exists(fpath):
+            continue
+        with open(fpath, 'r', encoding='utf-8') as f:
+            raw_list = json.load(f)
+
+        for raw in raw_list:
+            meta = raw.get("metadata", {})
+            examples.append(SFTExample(
+                example_id=raw.get("example_id", "unk"),
+                conversation=raw.get("conversation", []),
+                source=meta.get("source", raw.get("source", "unknown")),
+                domain=meta.get("domain", raw.get("domain", "general")),
+                quality_score=meta.get("quality_score", raw.get("quality_score", 1.0)),
+                license_type=meta.get("license_type", raw.get("license_type", "open"))
+            ))
     return examples
 
 
