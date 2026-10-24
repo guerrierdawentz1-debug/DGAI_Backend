@@ -131,31 +131,27 @@ def verify_code_reward(code_str: str, unit_test_func_name: str, test_cases: List
         encoded_test_cases = json.dumps(test_cases)
         encoded_func_name = json.dumps(unit_test_func_name)
 
-        runner_code = f"""
-import json, sys
-
-{code_str}
-
-test_cases = {encoded_test_cases}
-func_name = {encoded_func_name}
-
-if func_name not in globals():
-    print(json.dumps({{"passed": False, "reason": f"Fonction {{func_name}} non trouvée."}}))
-    sys.exit(0)
-
-func = globals()[func_name]
-passed = 0
-for tc in test_cases:
-    inp = tc.get("input", [])
-    exp = tc.get("output")
-    if not isinstance(inp, list):
-        inp = [inp]
-    if func(*inp) == exp:
-        passed += 1
-
-total = len(test_cases)
-print(json.dumps({{"passed": passed == total, "passed_count": passed, "total_count": total, "reason": f"{{passed}}/{{total}} tests réussis."}}))
-"""
+        runner_code = (
+            "import json, sys\n\n"
+            + code_str
+            + "\n\n"
+            + "test_cases = " + encoded_test_cases + "\n"
+            + "func_name = " + encoded_func_name + "\n\n"
+            + "if func_name not in globals():\n"
+            + "    print(json.dumps({'passed': False, 'reason': f'Fonction {func_name} non trouvée.'}))\n"
+            + "    sys.exit(0)\n\n"
+            + "func = globals()[func_name]\n"
+            + "passed = 0\n"
+            + "for tc in test_cases:\n"
+            + "    inp = tc.get('input', [])\n"
+            + "    exp = tc.get('output')\n"
+            + "    if not isinstance(inp, list):\n"
+            + "        inp = [inp]\n"
+            + "    if func(*inp) == exp:\n"
+            + "        passed += 1\n\n"
+            + "total = len(test_cases)\n"
+            + "print(json.dumps({'passed': passed == total, 'passed_count': passed, 'total_count': total, 'reason': f'{passed}/{total} tests réussis.'}))\n"
+        )
 
         with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tmp:
             tmp.write(runner_code)

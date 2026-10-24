@@ -16,6 +16,7 @@ from dgai.m4f_calibration import calculate_ece, evaluate_sycophancy_test_pair, e
 from dgai.search_engine import search_and_synthesize
 from dgai.response_style import format_response_by_style
 from dgai.tools import TOOL_SCHEMAS, execute_tool_call
+from dgai.reasoning import generate_reasoning_chain, chat_assistant_pipeline
 
 app = Flask(__name__)
 
@@ -168,6 +169,39 @@ def predict():
         "status": "success",
         "predictions": prediction.tolist()
     })
+
+
+# ---------------------------------------------------------
+# Production Q&A Chat & Ask Assistant Endpoints
+# ---------------------------------------------------------
+
+@app.route('/api/v1/chat', methods=['POST'])
+def api_chat():
+    data = request.json or {}
+    messages = data.get("messages", [])
+    style = data.get("style", "detailed")
+    reasoning_budget = data.get("reasoning_budget", 3)
+
+    if not messages:
+        return jsonify({"error": "Le paramètre 'messages' est obligatoire."}), 400
+
+    result = chat_assistant_pipeline(messages, style=style, reasoning_budget=reasoning_budget)
+    return jsonify(result)
+
+
+@app.route('/api/v1/ask', methods=['POST'])
+def api_ask():
+    data = request.json or {}
+    question = data.get("question") or data.get("prompt") or ""
+    style = data.get("style", "detailed")
+    reasoning_budget = data.get("reasoning_budget", 3)
+
+    if not question:
+        return jsonify({"error": "Le paramètre 'question' est obligatoire."}), 400
+
+    messages = [{"role": "user", "content": question}]
+    result = chat_assistant_pipeline(messages, style=style, reasoning_budget=reasoning_budget)
+    return jsonify(result)
 
 
 # ---------------------------------------------------------
