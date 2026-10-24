@@ -100,6 +100,16 @@ def verify_code_reward(code_str: str, unit_test_func_name: str, test_cases: List
     Evaluates Python code snippet against test cases in an isolated subprocess sandbox.
     """
     try:
+        # Validate function name identifier
+        if not unit_test_func_name.isidentifier():
+            return {
+                "passed": False,
+                "reward": 0.0,
+                "passed_count": 0,
+                "total_count": len(test_cases),
+                "reason": "Nom de fonction de test invalide."
+            }
+
         if "```python" in code_str:
             code_str = code_str.split("```python")[1].split("```")[0]
         elif "```" in code_str:
@@ -117,14 +127,17 @@ def verify_code_reward(code_str: str, unit_test_func_name: str, test_cases: List
                 "reason": f"Sécurité Sandbox: {safety_msg}"
             }
 
-        # Construct runner script for isolated execution in subprocess
+        # Safely JSON serialize variables for runner script
+        encoded_test_cases = json.dumps(test_cases)
+        encoded_func_name = json.dumps(unit_test_func_name)
+
         runner_code = f"""
 import json, sys
 
 {code_str}
 
-test_cases = {json.dumps(test_cases)}
-func_name = "{unit_test_func_name}"
+test_cases = {encoded_test_cases}
+func_name = {encoded_func_name}
 
 if func_name not in globals():
     print(json.dumps({{"passed": False, "reason": f"Fonction {{func_name}} non trouvée."}}))

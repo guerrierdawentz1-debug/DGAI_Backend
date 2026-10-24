@@ -15,6 +15,7 @@ from dgai.m4e_rewards import verify_math_reward, verify_format_reward, verify_co
 from dgai.m4f_calibration import calculate_ece, evaluate_sycophancy_test_pair, evaluate_calibrated_abstention, load_sycophancy_benchmark, load_ece_benchmark
 from dgai.search_engine import search_and_synthesize
 from dgai.response_style import format_response_by_style
+from dgai.tools import TOOL_SCHEMAS, execute_tool_call
 
 app = Flask(__name__)
 
@@ -77,7 +78,9 @@ def init_model():
     y_dummy = np.random.rand(10, output_size)
     X_scaled = scaler_X.fit_transform(X_dummy)
     y_scaled = scaler_y.fit_transform(y_dummy)
-    model.fit(X_scaled, y_scaled.ravel())
+
+    y_fit = y_scaled.ravel() if output_size == 1 else y_scaled
+    model.fit(X_scaled, y_fit)
     
     return jsonify({
         "status": "success",
@@ -100,7 +103,7 @@ def train_model():
     epochs = data.get('epochs', 100)
     
     if len(X_train) == 0:
-        return jsonify({"error": "Données de d'entraînement vides"}), 400
+        return jsonify({"error": "Données d'entraînement vides"}), 400
 
     # Normaliser les données
     X_train_scaled = scaler_X.fit_transform(X_train)
@@ -110,7 +113,8 @@ def train_model():
     
     # Entraîner le modèle
     model.max_iter = epochs
-    model.fit(X_train_scaled, y_train_scaled.ravel())
+    y_train_fit = y_train_scaled.ravel() if y_train_scaled.ndim > 1 and y_train_scaled.shape[1] == 1 else y_train_scaled
+    model.fit(X_train_scaled, y_train_fit)
     
     # Sauvegarder le modèle
     with open(model_path, 'wb') as f:
@@ -122,7 +126,9 @@ def train_model():
     
     # Calculer la perte de validation
     y_val_pred_scaled = model.predict(X_val_scaled)
-    y_val_pred = scaler_y.inverse_transform(y_val_pred_scaled.reshape(-1, 1))
+    if y_val_pred_scaled.ndim == 1 and y_val.ndim > 1 and y_val.shape[1] == 1:
+        y_val_pred_scaled = y_val_pred_scaled.reshape(-1, 1)
+    y_val_pred = scaler_y.inverse_transform(y_val_pred_scaled)
     val_loss = np.mean((y_val - y_val_pred) ** 2)
     
     return jsonify({
@@ -154,11 +160,44 @@ def predict():
     # Normaliser et prédire
     data_scaled = scaler_X.transform(data)
     prediction_scaled = model.predict(data_scaled)
-    prediction = scaler_y.inverse_transform(prediction_scaled.reshape(-1, 1))
+    if prediction_scaled.ndim == 1:
+        prediction_scaled = prediction_scaled.reshape(-1, 1)
+    prediction = scaler_y.inverse_transform(prediction_scaled)
     
     return jsonify({
         "status": "success",
         "predictions": prediction.tolist()
+    })
+
+
+# ---------------------------------------------------------
+# DGAI Tools API Endpoints
+# ---------------------------------------------------------
+
+@app.route('/api/v1/tools', methods=['GET'])
+def api_get_tools():
+    return jsonify({
+        "status": "success",
+        "count": len(TOOL_SCHEMAS),
+        "tools": TOOL_SCHEMAS
+    })
+
+
+@app.route('/api/v1/tools/execute', methods=['POST'])
+def api_execute_tool():
+    data = request.json or {}
+    tool_name = data.get("name") or data.get("tool_name")
+    arguments = data.get("arguments") or data.get("parameters") or {}
+
+    if not tool_name:
+        return jsonify({"error": "Le nom de l'outil est obligatoire."}), 400
+
+    res = execute_tool_call(tool_name, arguments)
+    return jsonify({
+        "status": "success",
+        "tool_name": tool_name,
+        "arguments": arguments,
+        "result": res
     })
 
 
