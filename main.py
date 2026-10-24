@@ -14,6 +14,7 @@ from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking,
 from dgai.m4e_rewards import verify_math_reward, verify_format_reward, verify_code_reward
 from dgai.m4f_calibration import calculate_ece, evaluate_sycophancy_test_pair, evaluate_calibrated_abstention, load_sycophancy_benchmark, load_ece_benchmark
 from dgai.search_engine import search_and_synthesize
+from dgai.response_style import format_response_by_style
 
 app = Flask(__name__)
 
@@ -178,6 +179,21 @@ def api_m4a_format():
         "status": "valid",
         "message": message,
         "masked_turns": masked_turns
+    })
+
+
+@app.route('/api/v1/m4a/style_format', methods=['POST'])
+def api_m4a_style_format():
+    data = request.json or {}
+    prompt = data.get("prompt", "")
+    content = data.get("content", "")
+    style = data.get("style", "detailed")
+    max_words = data.get("max_words")
+
+    res = format_response_by_style(prompt, content, style=style, max_words=max_words)
+    return jsonify({
+        "status": "success",
+        "result": res
     })
 
 

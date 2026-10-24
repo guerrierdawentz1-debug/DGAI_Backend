@@ -4,32 +4,12 @@ DGAI M4e — Verifiable Reward Engine (DGAI-M4-SPEC v6.0.0)
 
 import ast
 import json
+import os
+import sys
+import tempfile
+import subprocess
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Union, Tuple
-
-SAFE_BUILTINS = {
-    "abs": abs,
-    "all": all,
-    "any": any,
-    "bool": bool,
-    "dict": dict,
-    "enumerate": enumerate,
-    "float": float,
-    "int": int,
-    "len": len,
-    "list": list,
-    "max": max,
-    "min": min,
-    "range": range,
-    "reversed": reversed,
-    "round": round,
-    "set": set,
-    "sorted": sorted,
-    "str": str,
-    "sum": sum,
-    "tuple": tuple,
-    "zip": zip,
-}
 
 FORBIDDEN_AST_NODES = (
     ast.Import,
@@ -117,7 +97,7 @@ def verify_format_reward(model_output: str, expected_format: str = "json", requi
 
 def verify_code_reward(code_str: str, unit_test_func_name: str, test_cases: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Evaluates Python code snippet against test cases in an isolated AST-sandboxed namespace.
+    Evaluates Python code snippet against test cases in an isolated subprocess sandbox.
     """
     try:
         if "```python" in code_str:
@@ -137,31 +117,68 @@ def verify_code_reward(code_str: str, unit_test_func_name: str, test_cases: List
                 "reason": f"Sécurité Sandbox: {safety_msg}"
             }
 
-        exec_globals: Dict[str, Any] = {"__builtins__": SAFE_BUILTINS}
-        exec(code_str, exec_globals)
+        # Construct runner script for isolated execution in subprocess
+        runner_code = f"""
+import json, sys
 
-        if unit_test_func_name not in exec_globals:
-            return {"passed": False, "reward": 0.0, "passed_count": 0, "total_count": len(test_cases), "reason": f"Fonction {unit_test_func_name} non trouvée."}
+{code_str}
 
-        func = exec_globals[unit_test_func_name]
-        passed = 0
-        for tc in test_cases:
-            inputs = tc.get("input", [])
-            expected = tc.get("output")
-            if not isinstance(inputs, list):
-                inputs = [inputs]
-            res = func(*inputs)
-            if res == expected:
-                passed += 1
+test_cases = {json.dumps(test_cases)}
+func_name = "{unit_test_func_name}"
 
-        total = len(test_cases)
-        reward = passed / float(total) if total > 0 else 0.0
-        return {
-            "passed": passed == total,
-            "reward": round(reward, 2),
-            "passed_count": passed,
-            "total_count": total,
-            "reason": f"{passed}/{total} tests réussis."
-        }
+if func_name not in globals():
+    print(json.dumps({{"passed": False, "reason": f"Fonction {{func_name}} non trouvée."}}))
+    sys.exit(0)
+
+func = globals()[func_name]
+passed = 0
+for tc in test_cases:
+    inp = tc.get("input", [])
+    exp = tc.get("output")
+    if not isinstance(inp, list):
+        inp = [inp]
+    if func(*inp) == exp:
+        passed += 1
+
+total = len(test_cases)
+print(json.dumps({{"passed": passed == total, "passed_count": passed, "total_count": total, "reason": f"{{passed}}/{{total}} tests réussis."}}))
+"""
+
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tmp:
+            tmp.write(runner_code)
+            tmp_path = tmp.name
+
+        try:
+            proc = subprocess.run(
+                [sys.executable, tmp_path],
+                capture_output=True,
+                text=True,
+                timeout=2.0
+            )
+            if proc.returncode != 0:
+                return {
+                    "passed": False,
+                    "reward": 0.0,
+                    "passed_count": 0,
+                    "total_count": len(test_cases),
+                    "reason": f"Erreur d'exécution sandbox: {proc.stderr.strip() or proc.stdout.strip()}"
+                }
+            res_dict = json.loads(proc.stdout.strip())
+            passed_cnt = res_dict.get("passed_count", 0)
+            total_cnt = res_dict.get("total_count", len(test_cases))
+            reward = passed_cnt / float(total_cnt) if total_cnt > 0 else 0.0
+            return {
+                "passed": res_dict.get("passed", False),
+                "reward": round(reward, 2),
+                "passed_count": passed_cnt,
+                "total_count": total_cnt,
+                "reason": res_dict.get("reason", "")
+            }
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    except subprocess.TimeoutExpired:
+        return {"passed": False, "reward": 0.0, "passed_count": 0, "total_count": len(test_cases), "reason": "Dépassement du temps limite (2s) dans la sandbox."}
     except Exception as e:
         return {"passed": False, "reward": 0.0, "passed_count": 0, "total_count": len(test_cases), "reason": f"Erreur d'exécution: {str(e)}"}
