@@ -30,8 +30,8 @@ def test_detailed_style():
     content = "Le moteur à explosion transforme l'énergie thermique du carburant en énergie mécanique."
     res = format_response_by_style(prompt, content, style="detailed")
     assert res["style"] == "detailed"
-    assert "Contexte & Analyse" in res["formatted_response"]
-    assert "En résumé" in res["formatted_response"]
+    assert "moteur à explosion" in res["formatted_response"]
+    assert res["formatted_response"] == content
 
 
 def test_bullet_points_style():

@@ -30,10 +30,8 @@ def format_response_by_style(prompt: str, content: str, style: str = "detailed",
             formatted_text = " ".join(formatted_text.split()[:max_words]) + "..."
 
     elif style_clean in ("detailed", "long"):
-        # Expand with detailed context, analysis, and examples
-        bg_context = f"Contexte & Analyse : Pour répondre précisément à la demande concernant '{prompt}', examinons les faits et les mécanismes sous-jacents."
-        conclusion = "En résumé, ces éléments apportent une réponse complète et scientifiquement/techniquement étayée."
-        formatted_text = f"{bg_context}\n\n{content}\n\n{conclusion}"
+        # Provide clean, clear detailed text without artificial boilerplate
+        formatted_text = content
 
     elif style_clean == "bullet_points":
         bullet_items = []

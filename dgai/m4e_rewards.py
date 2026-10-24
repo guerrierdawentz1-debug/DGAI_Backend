@@ -16,19 +16,22 @@ FORBIDDEN_AST_NODES = (
     ast.ImportFrom,
 )
 
-FORBIDDEN_NAMES = {"os", "sys", "subprocess", "shutil", "importlib", "eval", "exec", "open", "__import__", "__builtins__"}
+FORBIDDEN_NAMES = {
+    "os", "sys", "subprocess", "shutil", "importlib", "eval", "exec", "open",
+    "__import__", "__builtins__", "__class__", "__subclasses__", "__mro__", "__bases__"
+}
 
 
 def _is_safe_ast(tree: ast.AST) -> Tuple[bool, str]:
     """
-    Validates that AST contains no imports or dangerous call names.
+    Validates that AST contains no imports or dangerous call names / reflection access.
     """
     for node in ast.walk(tree):
         if isinstance(node, FORBIDDEN_AST_NODES):
             return False, "Les instructions 'import' ne sont pas autorisées dans la sandbox de récompense."
-        if isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
+        if isinstance(node, ast.Name) and (node.id in FORBIDDEN_NAMES or node.id.startswith("__")):
             return False, f"L'accès à '{node.id}' est interdit dans la sandbox."
-        if isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_NAMES:
+        if isinstance(node, ast.Attribute) and (node.attr in FORBIDDEN_NAMES or node.attr.startswith("__")):
             return False, f"L'attribut '{node.attr}' est interdit dans la sandbox."
     return True, "Safe"
 

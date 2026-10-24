@@ -40,12 +40,19 @@ _SAFE_FUNCTIONS = {
 }
 
 
+MAX_MATH_POWER = 1000
+MAX_MATH_VALUE = 1e308
+
 def _eval_ast_math(node: ast.AST) -> Union[int, float]:
     if isinstance(node, ast.Expression):
         return _eval_ast_math(node.body)
     elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        if abs(node.value) > MAX_MATH_VALUE:
+            raise ValueError("Nombre trop grand dépassation des limites de sécurité.")
         return node.value
     elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+        if abs(node.n) > MAX_MATH_VALUE:
+            raise ValueError("Nombre trop grand dépassation des limites de sécurité.")
         return node.n
     elif isinstance(node, ast.BinOp):
         op_type = type(node.op)
@@ -53,7 +60,13 @@ def _eval_ast_math(node: ast.AST) -> Union[int, float]:
             raise ValueError(f"Opérateur non autorisé : {node.op}")
         left = _eval_ast_math(node.left)
         right = _eval_ast_math(node.right)
-        return _SAFE_OPERATORS[op_type](left, right)
+        if op_type is ast.Pow:
+            if abs(right) > MAX_MATH_POWER or abs(left) > 1e10:
+                raise ValueError("Puissance ou base trop grande pour un calcul sécurisé.")
+        res = _SAFE_OPERATORS[op_type](left, right)
+        if isinstance(res, (int, float)) and abs(res) > MAX_MATH_VALUE:
+            raise ValueError("Résultat dépassant les limites de sécurité.")
+        return res
     elif isinstance(node, ast.UnaryOp):
         op_type = type(node.op)
         if op_type not in _SAFE_OPERATORS:

@@ -106,7 +106,12 @@ def train_model():
     if len(X_train) == 0:
         return jsonify({"error": "Données d'entraînement vides"}), 400
 
-    # Normaliser les données
+    # Normaliser les données (assurer que y est 2D pour StandardScaler)
+    if y_train.ndim == 1:
+        y_train = y_train.reshape(-1, 1)
+    if y_val.ndim == 1 and len(y_val) > 0:
+        y_val = y_val.reshape(-1, 1)
+
     X_train_scaled = scaler_X.fit_transform(X_train)
     y_train_scaled = scaler_y.fit_transform(y_train)
     X_val_scaled = scaler_X.transform(X_val)

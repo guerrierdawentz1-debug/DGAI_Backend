@@ -103,23 +103,29 @@ def chat_assistant_pipeline(messages: List[Dict[str, Any]], style: str = "detail
         base_response = f"Actuellement, nous sommes le {time_data['date']} ({time_data['day_of_week']}) et il est {time_data['time']} ({time_data['timezone']})."
 
     elif any(k in lower_prompt for k in ["calcule", "combien font"]) or re.search(r'\b\d+\s*[\+\-\*\/\^]\s*\d+\b', lower_prompt):
-        # Extract math expression tokens
-        math_tokens = re.findall(r'\d+(?:\.\d+)?|[\+\-\*\/\^\(\)]', prompt)
+        # Extract math expression tokens supporting multi-char operators like **
+        math_tokens = re.findall(r'\d+(?:\.\d+)?|\*\*|[\+\-\*\/\^\(\)]', prompt)
         clean_expr = " ".join(math_tokens).strip() if math_tokens else prompt
         calc_data = calculator(clean_expr)
         tool_calls_executed.append({"tool_name": "calculator", "result": calc_data})
         if calc_data.get("status") == "success":
-            base_response = f"Le résultat du calcul ({calc_data['expression']}) est {calc_data['result']}."
+            base_response = f"Le résultat du calcul est {calc_data['result']}."
         else:
             base_response = f"Impossible d'évaluer le calcul : {calc_data.get('error')}."
 
-    elif any(k in lower_prompt for k in ["recherche", "météo", "dernières nouvelles", "qui est"]):
+    elif any(k in lower_prompt for k in ["recherche", "météo", "dernières nouvelles"]) or ("qui est" in lower_prompt and not any(k in lower_prompt for k in ["tu", "vous"])):
         search_res = search_and_synthesize(prompt)
         tool_calls_executed.append({"tool_name": "search_web", "result": search_res})
         base_response = search_res["synthesized_response"]
 
+    elif any(k in lower_prompt for k in ["comment t'appelles-tu", "tu t'appelles comment", "ton nom", "qui es-tu", "qui etes-vous", "présente-toi", "presente-toi"]):
+        base_response = "Je m'appelle DGAI, un assistant virtuel autonome conçu pour vous aider avec précision, honnêteté et sécurité."
+
+    elif lower_prompt in ["bonjour", "salut", "coucou", "hello", "bonsoir"]:
+        base_response = "Bonjour ! Comment puis-je vous aider aujourd'hui ?"
+
     else:
-        base_response = f"En réponse à votre question concernant '{prompt}' : DGAI fournit une assistance directe, exacte et vérifiée conformément à ses principes constitutionnels."
+        base_response = f"DGAI est à votre disposition. Concernant '{prompt}', je fournis une assistance directe, exacte et vérifiée."
 
     # 4. Constitutional Review on Candidate Response
     review_res = constitutional_review(prompt, base_response)
