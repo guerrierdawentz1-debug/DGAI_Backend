@@ -5,6 +5,7 @@ DGAI M4b — Supervised Fine-Tuning (SFT) Corpus, Metadata & Decontamination (DG
 import hashlib
 import json
 import os
+import glob
 import re
 from typing import List, Dict, Any, Set, Tuple
 
@@ -58,6 +59,38 @@ def load_sft_corpus(filepath: str = "data/sft_corpus.json") -> List[SFTExample]:
             license_type=raw.get("license_type", "open")
         ))
     return examples
+
+
+def load_sft_corpus_chunked(dir_path: str = "data/corpus_1M", offset: int = 0, limit: int = 100) -> Tuple[List[SFTExample], int]:
+    """
+    Streams and reads entries from chunked JSONL files in dir_path with pagination (offset & limit).
+    """
+    if not os.path.exists(dir_path):
+        return [], 0
+
+    jsonl_files = sorted(glob.glob(os.path.join(dir_path, "*.jsonl")))
+    total_count = 0
+    selected_examples = []
+
+    for fpath in jsonl_files:
+        with open(fpath, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                if total_count >= offset and len(selected_examples) < limit:
+                    raw = json.loads(line)
+                    meta = raw.get("metadata", {})
+                    selected_examples.append(SFTExample(
+                        example_id=raw.get("example_id", "unk"),
+                        conversation=raw.get("conversation", []),
+                        source=meta.get("source", "unknown"),
+                        domain=meta.get("domain", "general"),
+                        quality_score=meta.get("quality_score", 1.0),
+                        license_type=meta.get("license_type", "open")
+                    ))
+                total_count += 1
+
+    return selected_examples, total_count
 
 
 def deduplicate_examples(examples: List[SFTExample]) -> List[SFTExample]:

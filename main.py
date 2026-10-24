@@ -7,7 +7,7 @@ import os
 
 from dgai.constitution import get_constitution_summary, check_normative_conflict
 from dgai.m4a_format import validate_conversation, compute_loss_mask, format_tool_call
-from dgai.m4b_sft import SFTExample, load_sft_corpus, deduplicate_examples, decontaminate
+from dgai.m4b_sft import SFTExample, load_sft_corpus, load_sft_corpus_chunked, deduplicate_examples, decontaminate
 from dgai.m4b_data_generator import generate_sft_batch, DOMAINS
 from dgai.m4c_constitutional import constitutional_review
 from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking, load_preference_pairs
@@ -187,6 +187,25 @@ def api_m4b_sft_corpus():
         "status": "success",
         "count": len(examples),
         "corpus": [ex.to_dict() for ex in examples]
+    })
+
+
+@app.route('/api/v1/m4b/sft/corpus_chunked', methods=['POST'])
+def api_m4b_sft_corpus_chunked():
+    data = request.json or {}
+    dir_path = data.get("dir_path", "data/corpus_1M")
+    offset = data.get("offset", 0)
+    limit = min(data.get("limit", 100), 10000)
+
+    selected, total_count = load_sft_corpus_chunked(dir_path=dir_path, offset=offset, limit=limit)
+    return jsonify({
+        "status": "success",
+        "dir_path": dir_path,
+        "offset": offset,
+        "limit": limit,
+        "returned_count": len(selected),
+        "total_corpus_count": total_count,
+        "samples": [ex.to_dict() for ex in selected]
     })
 
 

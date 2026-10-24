@@ -99,12 +99,18 @@ def test_m4e_verifiable_rewards():
     f_res = verify_format_reward(model_output=json_output, expected_format="json", required_keys=["status"])
     assert f_res["valid"] is True
 
-    # Code reward
+    # Code reward (safe)
     code_str = "def add(a, b):\n    return a + b"
     test_cases = [{"input": [2, 3], "output": 5}, {"input": [10, -2], "output": 8}]
     c_res = verify_code_reward(code_str, "add", test_cases)
     assert c_res["passed"] is True
     assert c_res["reward"] == 1.0
+
+    # Code reward (unsafe code rejection in sandbox)
+    unsafe_code = "import os\ndef hack():\n    return os.listdir('.')"
+    u_res = verify_code_reward(unsafe_code, "hack", [])
+    assert u_res["passed"] is False
+    assert "Sécurité Sandbox" in u_res["reason"]
 
 
 def test_m4f_calibration():

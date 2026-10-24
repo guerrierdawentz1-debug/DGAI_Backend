@@ -7,7 +7,7 @@ import pytest
 import json
 from main import app
 from dgai.m4b_data_generator import generate_sft_sample, generate_sft_batch, stream_sft_corpus, DOMAINS
-from dgai.m4b_sft import deduplicate_examples
+from dgai.m4b_sft import deduplicate_examples, load_sft_corpus_chunked
 
 
 @pytest.fixture
@@ -58,3 +58,22 @@ def test_generate_corpus_api_endpoint(client):
     assert data["total_available_capacity"] == 1000000
     assert len(data["samples"]) == 50
     assert data["samples"][0]["metadata"]["domain"] == "questions_factuelles"
+
+
+def test_chunked_corpus_loader_and_api(client):
+    # Load via python function
+    samples, total = load_sft_corpus_chunked(dir_path="data/corpus_1M", offset=0, limit=25)
+    assert total >= 10000
+    assert len(samples) == 25
+
+    # Load via API
+    rv = client.post('/api/v1/m4b/sft/corpus_chunked', json={
+        "dir_path": "data/corpus_1M",
+        "offset": 50,
+        "limit": 30
+    })
+    assert rv.status_code == 200
+    data = json.loads(rv.data)
+    assert data["status"] == "success"
+    assert data["returned_count"] == 30
+    assert data["total_corpus_count"] >= 10000

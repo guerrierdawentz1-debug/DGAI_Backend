@@ -2,9 +2,55 @@
 DGAI M4e — Verifiable Reward Engine (DGAI-M4-SPEC v6.0.0)
 """
 
+import ast
 import json
 import xml.etree.ElementTree as ET
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Tuple
+
+SAFE_BUILTINS = {
+    "abs": abs,
+    "all": all,
+    "any": any,
+    "bool": bool,
+    "dict": dict,
+    "enumerate": enumerate,
+    "float": float,
+    "int": int,
+    "len": len,
+    "list": list,
+    "max": max,
+    "min": min,
+    "range": range,
+    "reversed": reversed,
+    "round": round,
+    "set": set,
+    "sorted": sorted,
+    "str": str,
+    "sum": sum,
+    "tuple": tuple,
+    "zip": zip,
+}
+
+FORBIDDEN_AST_NODES = (
+    ast.Import,
+    ast.ImportFrom,
+)
+
+FORBIDDEN_NAMES = {"os", "sys", "subprocess", "shutil", "importlib", "eval", "exec", "open", "__import__", "__builtins__"}
+
+
+def _is_safe_ast(tree: ast.AST) -> Tuple[bool, str]:
+    """
+    Validates that AST contains no imports or dangerous call names.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, FORBIDDEN_AST_NODES):
+            return False, "Les instructions 'import' ne sont pas autorisées dans la sandbox de récompense."
+        if isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
+            return False, f"L'accès à '{node.id}' est interdit dans la sandbox."
+        if isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_NAMES:
+            return False, f"L'attribut '{node.attr}' est interdit dans la sandbox."
+    return True, "Safe"
 
 
 def verify_math_reward(expected_val: Union[int, float], model_output: str, tolerance: float = 1e-4) -> Dict[str, Any]:
@@ -12,13 +58,12 @@ def verify_math_reward(expected_val: Union[int, float], model_output: str, toler
     Verifies numerical math answer extracted from response.
     """
     try:
-        # Simple extraction logic looking for numbers in response or direct equality
         import re
         numbers = re.findall(r"[-+]?\d*\.\d+|\d+", model_output)
         if not numbers:
             return {"correct": False, "reward": 0.0, "extracted": None, "expected": expected_val, "reason": "Aucun nombre extrait."}
 
-        extracted_float = float(numbers[-1]) # inspect final extracted number
+        extracted_float = float(numbers[-1])
         is_correct = abs(extracted_float - float(expected_val)) <= tolerance
         reward = 1.0 if is_correct else 0.0
 
@@ -39,7 +84,6 @@ def verify_format_reward(model_output: str, expected_format: str = "json", requi
     """
     if expected_format.lower() == "json":
         try:
-            # Extract json codeblock if present
             clean_output = model_output.strip()
             if "```json" in clean_output:
                 clean_output = clean_output.split("```json")[1].split("```")[0].strip()
@@ -73,16 +117,27 @@ def verify_format_reward(model_output: str, expected_format: str = "json", requi
 
 def verify_code_reward(code_str: str, unit_test_func_name: str, test_cases: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Evaluates Python code snippet against mock test cases in an isolated execution namespace.
+    Evaluates Python code snippet against test cases in an isolated AST-sandboxed namespace.
     """
     try:
-        # Extract code block if wrapped in markdown
         if "```python" in code_str:
             code_str = code_str.split("```python")[1].split("```")[0]
         elif "```" in code_str:
             code_str = code_str.split("```")[1].split("```")[0]
 
-        exec_globals: Dict[str, Any] = {}
+        # Parse AST & validate safety
+        tree = ast.parse(code_str)
+        is_safe, safety_msg = _is_safe_ast(tree)
+        if not is_safe:
+            return {
+                "passed": False,
+                "reward": 0.0,
+                "passed_count": 0,
+                "total_count": len(test_cases),
+                "reason": f"Sécurité Sandbox: {safety_msg}"
+            }
+
+        exec_globals: Dict[str, Any] = {"__builtins__": SAFE_BUILTINS}
         exec(code_str, exec_globals)
 
         if unit_test_func_name not in exec_globals:
