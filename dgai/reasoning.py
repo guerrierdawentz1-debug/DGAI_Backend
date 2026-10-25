@@ -55,7 +55,7 @@ def generate_reasoning_chain(prompt: str, reasoning_budget: int = 3) -> Dict[str
     }
 
 
-def chat_assistant_pipeline(messages: List[Dict[str, Any]], style: str = "detailed", reasoning_budget: int = 3) -> Dict[str, Any]:
+def chat_assistant_pipeline(messages: List[Dict[str, Any]], style: str = "detailed", reasoning_budget: int = 3, force_web_search: bool = False) -> Dict[str, Any]:
     """
     Complete production Q&A assistant pipeline:
     1. Extracts last user prompt.
@@ -97,10 +97,15 @@ def chat_assistant_pipeline(messages: List[Dict[str, Any]], style: str = "detail
     tool_calls_executed = []
     base_response = ""
 
-    if any(k in lower_prompt for k in ["comment ça va", "comment ca va", "ca va", "ça va"]):
+    if force_web_search:
+        search_res = search_and_synthesize(prompt)
+        tool_calls_executed.append({"tool_name": "search_web", "result": search_res})
+        base_response = search_res["synthesized_response"]
+
+    elif any(k in lower_prompt for k in ["comment ça va", "comment ca va", "ca va", "ça va"]):
         base_response = "Je vais très bien, merci ! En tant qu'assistant DGAI, je suis à votre disposition. Comment puis-je vous aider aujourd'hui ?"
 
-    elif re.search(r'\b(quelle heure|l\'heure|date|aujourd\'hui|quel jour|heure actuelle)\b', lower_prompt) or (re.search(r'\bjour\b', lower_prompt) and not any(g in lower_prompt for g in ["bonjour", "bonsoir"])):
+    elif re.search(r'\b(quelle heure|l\'heure|date|aujourd\'hui|quel jour|heure actuelle|quel heure)\b', lower_prompt) or (re.search(r'\bjour\b', lower_prompt) and not any(g in lower_prompt for g in ["bonjour", "bonsoir"])):
         time_data = get_current_time()
         tool_calls_executed.append({"tool_name": "get_current_time", "result": time_data})
         base_response = f"Actuellement, nous sommes le {time_data['date']} ({time_data['day_of_week']}) et il est {time_data['time']} ({time_data['timezone']})."
@@ -135,11 +140,17 @@ def chat_assistant_pipeline(messages: List[Dict[str, Any]], style: str = "detail
             "N'hésitez pas à me préciser si vous souhaitez créer une interface web (avec Flask ou FastAPI) ou un script spécifique !"
         )
 
+    elif "python" in lower_prompt:
+        base_response = "Python est un langage de programmation interprété, de haut niveau et multi-paradigmes (orienté objet, impératif, fonctionnel). Il est largement utilisé pour le développement web, l'analyse de données, l'intelligence artificielle et l'automatisation grâce à sa syntaxe lisible et son riche écosystème de bibliothèques."
+
+    elif "apple" in lower_prompt:
+        base_response = "Apple Inc. est une entreprise multinationale américaine spécialisée dans la conception et la commercialisation de produits électroniques grand public (iPhone, Mac, iPad, Apple Watch), de logiciels (iOS, macOS) et de services en ligne."
+
     elif "google" in lower_prompt:
-        base_response = "Google est une entreprise multinationale américaine de technologie spécialisée dans les services et produits liés à Internet, incluant un moteur de recherche, le système d'exploitation Android, des services cloud et des technologies d'IA."
+        base_response = "Google LLC est une entreprise multinationale américaine de technologie spécialisée dans les services et produits liés à Internet, incluant un moteur de recherche mondial, le système d'exploitation Android, YouTube, le cloud computing et l'intelligence artificielle."
 
     elif "langage" in lower_prompt:
-        base_response = "Un langage de programmation (comme Python, JavaScript ou C++) est un code de communication permettant à un développeur d'écrire des instructions qu'un ordinateur peut comprendre et exécuter."
+        base_response = "Un langage de programmation (comme Python, JavaScript ou C++) est un code de communication structuré permettant à un développeur d'écrire des instructions informatiques exécutables par un ordinateur."
 
     elif any(k in lower_prompt for k in ["recherche", "météo", "dernières nouvelles"]) or ("qui est" in lower_prompt and not any(k in lower_prompt for k in ["tu", "vous"])):
         search_res = search_and_synthesize(prompt)
@@ -147,10 +158,10 @@ def chat_assistant_pipeline(messages: List[Dict[str, Any]], style: str = "detail
         base_response = search_res["synthesized_response"]
 
     else:
-        # Grounded response fallback
+        # Grounded response fallback via live search synthesis
         search_res = search_and_synthesize(prompt)
         tool_calls_executed.append({"tool_name": "search_web", "result": search_res})
-        base_response = f"Voici les informations concernant votre demande '{prompt}' :\n\n" + search_res["synthesized_response"]
+        base_response = search_res["synthesized_response"]
 
     # 4. Constitutional Review on Candidate Response
     review_res = constitutional_review(prompt, base_response)

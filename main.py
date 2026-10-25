@@ -145,35 +145,75 @@ def train_model():
     })
 
 
+@app.route('/predict', methods=['POST'])
 @app.route('/api/v1/predict', methods=['POST'])
 def predict():
     global model, scaler_X, scaler_y
-    
-    # Charger le modèle s'il n'est pas en mémoire
-    if model is None:
-        if os.path.exists(model_path):
-            with open(model_path, 'rb') as f:
-                model = pickle.load(f)
-            with open(scaler_X_path, 'rb') as f:
-                scaler_X = pickle.load(f)
-            with open(scaler_y_path, 'rb') as f:
-                scaler_y = pickle.load(f)
-        else:
-            return jsonify({"error": "Aucun modèle entraîné"}), 400
-    
-    data = np.array(request.json['data'])
-    
-    # Normaliser et prédire
-    data_scaled = scaler_X.transform(data)
-    prediction_scaled = model.predict(data_scaled)
-    if prediction_scaled.ndim == 1:
-        prediction_scaled = prediction_scaled.reshape(-1, 1)
-    prediction = scaler_y.inverse_transform(prediction_scaled)
-    
-    return jsonify({
-        "status": "success",
-        "predictions": prediction.tolist()
-    })
+    data_json = request.json or {}
+
+    # 1. Check if request is a text / Q&A chat prompt from Android / client
+    question = (
+        data_json.get("prompt") or
+        data_json.get("question") or
+        data_json.get("text") or
+        data_json.get("message") or
+        data_json.get("query") or
+        data_json.get("content")
+    )
+    messages = data_json.get("messages")
+
+    if question or messages:
+        if not messages and question:
+            messages = [{"role": "user", "content": str(question)}]
+
+        style = data_json.get("style", "detailed")
+        reasoning_budget = data_json.get("reasoning_budget", 3)
+        force_web_search = bool(data_json.get("web_search") or data_json.get("search_web") or data_json.get("web_search_enabled"))
+
+        result = chat_assistant_pipeline(messages, style=style, reasoning_budget=reasoning_budget, force_web_search=force_web_search)
+
+        resp_text = result.get("response", "")
+        return jsonify({
+            "status": result.get("status", "success"),
+            "response": resp_text,
+            "answer": resp_text,
+            "text": resp_text,
+            "prediction": resp_text,
+            "predictions": [resp_text],
+            "thought_trace": result.get("thought_trace", ""),
+            "reasoning_steps": result.get("reasoning_steps", []),
+            "tool_calls": result.get("tool_calls", []),
+            "style": result.get("style", style)
+        })
+
+    # 2. Otherwise, handle scikit-learn MLPRegressor numerical matrix prediction
+    raw_data = data_json.get('data')
+    if raw_data is not None:
+        if model is None:
+            if os.path.exists(model_path):
+                with open(model_path, 'rb') as f:
+                    model = pickle.load(f)
+                with open(scaler_X_path, 'rb') as f:
+                    scaler_X = pickle.load(f)
+                with open(scaler_y_path, 'rb') as f:
+                    scaler_y = pickle.load(f)
+            else:
+                return jsonify({"error": "Aucun modèle entraîné"}), 400
+
+        data_arr = np.array(raw_data)
+        data_scaled = scaler_X.transform(data_arr)
+        prediction_scaled = model.predict(data_scaled)
+        if prediction_scaled.ndim == 1:
+            prediction_scaled = prediction_scaled.reshape(-1, 1)
+        prediction = scaler_y.inverse_transform(prediction_scaled)
+
+        return jsonify({
+            "status": "success",
+            "predictions": prediction.tolist(),
+            "prediction": prediction.tolist()
+        })
+
+    return jsonify({"error": "Requête invalide. Veuillez fournir des données numériques ou un texte/prompt."}), 400
 
 
 # ---------------------------------------------------------

@@ -57,7 +57,8 @@ def test_greetings_and_general_queries():
     # "C'est quoi Google"
     res_google = chat_assistant_pipeline([{"role": "user", "content": "C'est quoi Google"}])
     assert res_google["status"] == "success"
-    assert "Google est une entreprise" in res_google["response"]
+    assert "Google" in res_google["response"]
+    assert "entreprise" in res_google["response"]
 
     # "Code une page en python pour moi"
     res_code = chat_assistant_pipeline([{"role": "user", "content": "Code une page en python pour moi"}])

@@ -35,11 +35,26 @@ def test_mlp_init_and_predict(client):
     init_res = client.post('/api/v1/init', json={"input_size": 3, "hidden_size": 10, "output_size": 1})
     assert init_res.status_code == 200
 
-    # Predict
+    # Predict numerical
     pred_res = client.post('/api/v1/predict', json={"data": [[1.0, 2.0, 3.0]]})
     assert pred_res.status_code == 200
     p_data = json.loads(pred_res.data)
     assert "predictions" in p_data
+
+
+def test_predict_text_prompt_endpoint(client):
+    # Predict text prompt on /predict and /api/v1/predict
+    res_py = client.post('/predict', json={"prompt": "C'est quoi Python"})
+    assert res_py.status_code == 200
+    data_py = json.loads(res_py.data)
+    assert "Python est un langage" in data_py["response"]
+    assert "response" in data_py
+    assert "prediction" in data_py
+
+    res_time = client.post('/api/v1/predict', json={"question": "Quel heure il est"})
+    assert res_time.status_code == 200
+    data_time = json.loads(res_time.data)
+    assert "Actuellement, nous sommes le" in data_time["response"]
 
 
 def test_m4a_format_endpoint(client):
