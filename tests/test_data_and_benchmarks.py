@@ -48,6 +48,39 @@ def test_sft_corpus_api_endpoint(client):
     assert data["count"] >= 8
 
 
+def test_quality_pipeline_api_endpoint(client):
+    payload = {
+        "examples": [
+            {
+                "example_id": "ex1",
+                "conversation": [{"role": "user", "content": "Écris un script Python"}, {"role": "assistant", "content": "```python\nprint('hello')\n```"}],
+                "domain": "programmation_et_tests",
+                "quality_score": 0.95
+            },
+            {
+                "example_id": "ex_dup",
+                "conversation": [{"role": "user", "content": "Écris un script Python"}, {"role": "assistant", "content": "```python\nprint('hello')\n```"}],
+                "domain": "programmation_et_tests",
+                "quality_score": 0.95
+            },
+            {
+                "example_id": "ex_noise",
+                "conversation": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}],
+                "domain": "general",
+                "quality_score": 0.1
+            }
+        ],
+        "eval_benchmark_prompts": []
+    }
+    rv = client.post('/api/v1/m4b/sft/quality_pipeline', json=payload)
+    assert rv.status_code == 200
+    data = json.loads(rv.data)
+    assert data["status"] == "success"
+    assert data["dedup_removed"] == 1
+    assert data["noise_removed"] == 1
+    assert data["final_balanced_count"] >= 1
+
+
 def test_sycophancy_benchmark_api_endpoint(client):
     rv = client.get('/api/v1/m4f/sycophancy/benchmark')
     assert rv.status_code == 200

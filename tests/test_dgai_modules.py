@@ -5,7 +5,7 @@ Unit Tests for DGAI Core Modules (DGAI-M4-SPEC v6.0.0)
 import pytest
 from dgai.constitution import ARTICLES, HIERARCHY, get_constitution_summary, check_normative_conflict
 from dgai.m4a_format import validate_conversation, validate_message, compute_loss_mask, format_tool_call, parse_tool_call
-from dgai.m4b_sft import SFTExample, deduplicate_examples, decontaminate
+from dgai.m4b_sft import SFTExample, deduplicate_examples, decontaminate, filter_noise, classify_macro_category, balance_corpus_by_categories
 from dgai.m4c_constitutional import constitutional_review
 from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking
 from dgai.m4e_rewards import verify_math_reward, verify_format_reward, verify_code_reward
@@ -56,17 +56,28 @@ def test_m4a_format():
 
 
 def test_m4b_sft():
-    ex1 = SFTExample("ex1", [{"role": "user", "content": "Prompt A"}, {"role": "assistant", "content": "Ans A"}], "src1", "math")
-    ex2 = SFTExample("ex2", [{"role": "user", "content": "Prompt A"}, {"role": "assistant", "content": "Ans A"}], "src2", "math")
-    ex3 = SFTExample("ex3", [{"role": "user", "content": "Prompt B"}, {"role": "assistant", "content": "Ans B"}], "src3", "code")
+    ex1 = SFTExample("ex1", [{"role": "user", "content": "Prompt A long content here"}, {"role": "assistant", "content": "Ans A long content here"}], "src1", "raisonnement_mathematique")
+    ex2 = SFTExample("ex2", [{"role": "user", "content": "Prompt A long content here"}, {"role": "assistant", "content": "Ans A long content here"}], "src2", "raisonnement_mathematique")
+    ex3 = SFTExample("ex3", [{"role": "user", "content": "Écris une fonction Python: def hello(): pass"}, {"role": "assistant", "content": "```python\ndef hello(): pass\n```"}], "src3", "programmation_et_tests")
+    ex_noise = SFTExample("ex_noise", [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}], "src4", "general", quality_score=0.2)
 
-    deduped = deduplicate_examples([ex1, ex2, ex3])
-    assert len(deduped) == 2
+    deduped = deduplicate_examples([ex1, ex2, ex3, ex_noise])
+    assert len(deduped) == 3
 
-    clean, removed = decontaminate(deduped, ["Prompt A"])
+    clean_no_noise, noise_removed = filter_noise(deduped)
+    assert noise_removed == 1
+    assert len(clean_no_noise) == 2
+
+    clean, removed = decontaminate(clean_no_noise, ["Prompt A long content here"])
     assert removed == 1
     assert len(clean) == 1
     assert clean[0].example_id == "ex3"
+
+    cat = classify_macro_category(clean[0])
+    assert cat == "code"
+
+    balanced = balance_corpus_by_categories([ex1, ex3])
+    assert len(balanced) > 0
 
 
 def test_m4c_constitutional_review():

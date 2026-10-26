@@ -7,7 +7,7 @@ import json
 import os
 import glob
 import re
-from typing import List, Dict, Any, Set, Tuple
+from typing import List, Dict, Any, Set, Tuple, Optional
 
 
 class SFTExample:
@@ -144,3 +144,115 @@ def decontaminate(train_examples: List[SFTExample], eval_benchmark_prompts: List
             clean_examples.append(ex)
 
     return clean_examples, removed_count
+
+
+def filter_noise(
+    examples: List[SFTExample],
+    min_length: int = 10,
+    max_repetition_ratio: float = 0.5,
+    min_quality_score: float = 0.5
+) -> Tuple[List[SFTExample], int]:
+    """
+    Filters out noise: empty/short messages, low quality score, and high word/character repetition.
+    """
+    clean_examples = []
+    filtered_count = 0
+
+    for ex in examples:
+        if ex.quality_score < min_quality_score:
+            filtered_count += 1
+            continue
+
+        text = ex.get_content_text().strip()
+        if len(text) < min_length:
+            filtered_count += 1
+            continue
+
+        # Check repetition noise (e.g., repeated words or characters)
+        words = re.findall(r'\w+', text.lower())
+        if len(words) > 5:
+            unique_word_ratio = len(set(words)) / float(len(words))
+            if (1.0 - unique_word_ratio) > max_repetition_ratio:
+                filtered_count += 1
+                continue
+
+        clean_examples.append(ex)
+
+    return clean_examples, filtered_count
+
+
+def classify_macro_category(ex: SFTExample) -> str:
+    """
+    Classifies an SFT example into macro categories: 'code', 'raisonnement', 'multilingue', or 'texte'.
+    """
+    domain = ex.domain.lower()
+    content = ex.get_content_text().lower()
+
+    if any(k in domain for k in ["code", "programmation", "script", "test", "python", "java", "cpp"]):
+        return "code"
+    if "```" in content or "def " in content or "import " in content or "function(" in content:
+        return "code"
+
+    if any(k in domain for k in ["mathematique", "raisonnement", "calcul", "logique", "derivee"]):
+        return "raisonnement"
+    if any(k in content for k in ["f'(x)", "résoudre", "équation", "dérivée", "démonstration", "théorème"]):
+        return "raisonnement"
+
+    if any(k in domain for k in ["multilingue", "traduction", "english", "spanish", "german"]):
+        return "multilingue"
+    if any(k in content for k in ["translate", "traduis", "en anglais", "en espagnol", "in english"]):
+        return "multilingue"
+
+    return "texte"
+
+
+def balance_corpus_by_categories(
+    examples: List[SFTExample],
+    target_ratios: Optional[Dict[str, float]] = None
+) -> List[SFTExample]:
+    """
+    Balances corpus across code, texte, raisonnement, and multilingue categories.
+    Default targets equal balance (25% each).
+    """
+    if not examples:
+        return []
+
+    if target_ratios is None:
+        target_ratios = {
+            "code": 0.25,
+            "texte": 0.25,
+            "raisonnement": 0.25,
+            "multilingue": 0.25
+        }
+
+    # Group examples by category
+    categorized: Dict[str, List[SFTExample]] = {
+        "code": [],
+        "texte": [],
+        "raisonnement": [],
+        "multilingue": []
+    }
+
+    for ex in examples:
+        cat = classify_macro_category(ex)
+        categorized[cat].append(ex)
+
+    total_target = len(examples)
+    balanced_result = []
+
+    for cat, ratio in target_ratios.items():
+        cat_examples = categorized.get(cat, [])
+        if not cat_examples:
+            continue
+
+        count_needed = max(1, int(round(total_target * ratio)))
+
+        if len(cat_examples) >= count_needed:
+            balanced_result.extend(cat_examples[:count_needed])
+        else:
+            # Upsample/repeat if category underrepresented
+            multiplier = (count_needed // len(cat_examples)) + 1
+            upsampled = (cat_examples * multiplier)[:count_needed]
+            balanced_result.extend(upsampled)
+
+    return balanced_result

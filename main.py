@@ -7,7 +7,7 @@ import os
 
 from dgai.constitution import get_constitution_summary, check_normative_conflict
 from dgai.m4a_format import validate_conversation, compute_loss_mask, format_tool_call
-from dgai.m4b_sft import SFTExample, load_sft_corpus, load_sft_corpus_chunked, deduplicate_examples, decontaminate
+from dgai.m4b_sft import SFTExample, load_sft_corpus, load_sft_corpus_chunked, deduplicate_examples, decontaminate, filter_noise, balance_corpus_by_categories
 from dgai.m4b_data_generator import generate_sft_batch, DOMAINS
 from dgai.m4c_constitutional import constitutional_review
 from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking, load_preference_pairs
@@ -393,6 +393,55 @@ def api_m4b_decontaminate():
         "decontam_removed": decontam_removed,
         "final_count": len(clean_objs),
         "clean_examples": [obj.to_dict() for obj in clean_objs]
+    })
+
+
+@app.route('/api/v1/m4b/sft/quality_pipeline', methods=['POST'])
+def api_m4b_quality_pipeline():
+    """
+    Data quality pipeline: Deduplicates, filters noise, decontaminates, and balances across macro categories.
+    """
+    data = request.json or {}
+    raw_examples = data.get("examples", [])
+    eval_prompts = data.get("eval_benchmark_prompts", [])
+    target_ratios = data.get("target_ratios")
+
+    if not raw_examples:
+        sft_objs = load_sft_corpus()
+    else:
+        sft_objs = []
+        for idx, raw in enumerate(raw_examples):
+            meta = raw.get("metadata", {})
+            sft_objs.append(SFTExample(
+                example_id=raw.get("example_id", f"ex_{idx}"),
+                conversation=raw.get("conversation", []),
+                source=meta.get("source", raw.get("source", "unknown")),
+                domain=meta.get("domain", raw.get("domain", "general")),
+                quality_score=meta.get("quality_score", raw.get("quality_score", 1.0)),
+                license_type=meta.get("license_type", raw.get("license_type", "open"))
+            ))
+
+    # 1. Deduplication
+    deduped = deduplicate_examples(sft_objs)
+    dedup_removed = len(sft_objs) - len(deduped)
+
+    # 2. Noise Filtering
+    clean_no_noise, noise_removed = filter_noise(deduped)
+
+    # 3. Decontamination
+    decontam_clean, decontam_removed = decontaminate(clean_no_noise, eval_prompts)
+
+    # 4. Category Balancing (code, texte, raisonnement, multilingue)
+    balanced_corpus = balance_corpus_by_categories(decontam_clean, target_ratios=target_ratios)
+
+    return jsonify({
+        "status": "success",
+        "original_count": len(sft_objs),
+        "dedup_removed": dedup_removed,
+        "noise_removed": noise_removed,
+        "decontam_removed": decontam_removed,
+        "final_balanced_count": len(balanced_corpus),
+        "balanced_examples": [obj.to_dict() for obj in balanced_corpus]
     })
 
 
