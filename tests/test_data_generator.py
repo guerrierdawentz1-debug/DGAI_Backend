@@ -6,7 +6,7 @@ Unit and API Integration Tests for High-Capacity Synthetic Data Generator
 import pytest
 import json
 from main import app
-from dgai.m4b_data_generator import generate_sft_sample, generate_sft_batch, stream_sft_corpus, DOMAINS
+from dgai.m4b_data_generator import generate_sft_sample, generate_sft_batch, stream_sft_corpus, DOMAINS, calculate_chinchilla_token_ratio, estimate_dataset_token_count
 from dgai.m4b_sft import deduplicate_examples, load_sft_corpus_chunked
 
 
@@ -77,3 +77,25 @@ def test_chunked_corpus_loader_and_api(client):
     assert data["status"] == "success"
     assert data["returned_count"] == 30
     assert data["total_corpus_count"] >= 10000
+
+
+def test_chinchilla_scaling_metrics_and_api(client):
+    samples = generate_sft_batch(start_index=0, count=50)
+    est = estimate_dataset_token_count(samples)
+    assert est["example_count"] == 50
+    assert est["estimated_tokens"] > 0
+
+    chinchilla = calculate_chinchilla_token_ratio(num_parameters=1000000, num_tokens=100000000)
+    assert chinchilla["is_chinchilla_optimal"] is True
+    assert chinchilla["is_overtrained_optimal"] is True
+    assert chinchilla["status"] == "overtrained_optimal"
+
+    # API test
+    rv = client.post('/api/v1/m4b/sft/token_scaling_metrics', json={
+        "num_parameters": 10000000,
+        "num_tokens": 500000000
+    })
+    assert rv.status_code == 200
+    data = json.loads(rv.data)
+    assert data["status"] == "success"
+    assert data["scaling_metrics"]["is_chinchilla_optimal"] is True

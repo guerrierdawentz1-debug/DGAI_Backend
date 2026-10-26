@@ -118,3 +118,56 @@ def stream_sft_corpus(total_count: int = 1000000, batch_size: int = 1000) -> Gen
         current_batch_size = min(batch_size, total_count - generated)
         yield generate_sft_batch(start_index=generated, count=current_batch_size)
         generated += current_batch_size
+
+
+def estimate_dataset_token_count(examples: List[SFTExample], approx_tokens_per_word: float = 1.3) -> Dict[str, Any]:
+    """
+    Estimates word count and BPE token count for a list of SFT examples.
+    """
+    total_words = 0
+    for ex in examples:
+        text = ex.get_content_text()
+        words = len(text.split())
+        total_words += words
+
+    estimated_tokens = int(total_words * approx_tokens_per_word)
+    return {
+        "example_count": len(examples),
+        "total_words": total_words,
+        "estimated_tokens": estimated_tokens,
+        "avg_tokens_per_example": estimated_tokens / max(1, len(examples))
+    }
+
+
+def calculate_chinchilla_token_ratio(num_parameters: int, num_tokens: int) -> Dict[str, Any]:
+    """
+    Calculates the token-to-parameter ratio according to scaling laws (Chinchilla baseline = 20.0).
+    Optimal modern LLM over-training paradigm aims for 50-200+ tokens per parameter.
+    """
+    if num_parameters <= 0:
+        return {"error": "num_parameters must be positive"}
+
+    ratio = float(num_tokens) / float(num_parameters)
+    is_chinchilla_optimal = ratio >= 20.0
+    is_overtrained_optimal = ratio >= 50.0
+
+    if ratio < 20.0:
+        status = "under_trained"
+        recommendation = f"Augmenter le volume de données propres de {(20.0 * num_parameters) - num_tokens:,.0f} tokens pour atteindre l'optimum de Chinchilla (20 tokens/paramètre)."
+    elif ratio < 50.0:
+        status = "chinchilla_compliant"
+        recommendation = "Conforme à la loi de Chinchilla. Un sur-entraînement avec 50-200+ tokens/paramètre améliorera davantage l'efficacité à l'inférence."
+    else:
+        status = "overtrained_optimal"
+        recommendation = "Sur-entraînement optimal atteint (>50 tokens par paramètre). Modèle hautement efficient pour le déploiement."
+
+    return {
+        "num_parameters": num_parameters,
+        "num_tokens": num_tokens,
+        "token_parameter_ratio": round(ratio, 2),
+        "chinchilla_baseline_ratio": 20.0,
+        "is_chinchilla_optimal": is_chinchilla_optimal,
+        "is_overtrained_optimal": is_overtrained_optimal,
+        "status": status,
+        "recommendation": recommendation
+    }

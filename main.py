@@ -8,7 +8,7 @@ import os
 from dgai.constitution import get_constitution_summary, check_normative_conflict
 from dgai.m4a_format import validate_conversation, compute_loss_mask, format_tool_call
 from dgai.m4b_sft import SFTExample, load_sft_corpus, load_sft_corpus_chunked, deduplicate_examples, decontaminate, filter_noise, balance_corpus_by_categories
-from dgai.m4b_data_generator import generate_sft_batch, DOMAINS
+from dgai.m4b_data_generator import generate_sft_batch, DOMAINS, calculate_chinchilla_token_ratio, estimate_dataset_token_count
 from dgai.m4c_constitutional import constitutional_review
 from dgai.m4d_preference import evaluate_preference_pair, detect_reward_hacking, load_preference_pairs
 from dgai.m4e_rewards import verify_math_reward, verify_format_reward, verify_code_reward
@@ -442,6 +442,46 @@ def api_m4b_quality_pipeline():
         "decontam_removed": decontam_removed,
         "final_balanced_count": len(balanced_corpus),
         "balanced_examples": [obj.to_dict() for obj in balanced_corpus]
+    })
+
+
+@app.route('/api/v1/m4b/sft/token_scaling_metrics', methods=['POST'])
+def api_m4b_token_scaling_metrics():
+    """
+    Calculates token volume and Chinchilla scaling ratio (>20 tokens/param, optimal >50-200 tokens/param).
+    """
+    data = request.json or {}
+    num_parameters = data.get("num_parameters", 1000000000)  # default 1B params
+    num_tokens = data.get("num_tokens")
+
+    if num_tokens is None:
+        # Estimate from default SFT corpus or provided examples
+        raw_examples = data.get("examples", [])
+        if not raw_examples:
+            examples = load_sft_corpus()
+        else:
+            examples = []
+            for idx, raw in enumerate(raw_examples):
+                meta = raw.get("metadata", {})
+                examples.append(SFTExample(
+                    example_id=raw.get("example_id", f"ex_{idx}"),
+                    conversation=raw.get("conversation", []),
+                    source=meta.get("source", "unknown"),
+                    domain=meta.get("domain", "general")
+                ))
+
+        est_stats = estimate_dataset_token_count(examples)
+        num_tokens = est_stats["estimated_tokens"]
+    else:
+        est_stats = None
+
+    metrics = calculate_chinchilla_token_ratio(num_parameters=num_parameters, num_tokens=num_tokens)
+    if est_stats:
+        metrics["dataset_token_estimate"] = est_stats
+
+    return jsonify({
+        "status": "success",
+        "scaling_metrics": metrics
     })
 
 
