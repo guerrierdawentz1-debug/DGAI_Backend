@@ -41,6 +41,11 @@ TEMPLATES_BY_DOMAIN = {
         ("Écris une fonction Python pour sommer une liste de nombres.", "Voici la fonction :\n```python\ndef sum_list(numbers: list[float]) -> float:\n    return sum(numbers)\n```"),
         ("Comment inverser une chaîne de caractères en Python ?", "En Python, vous pouvez utiliser le slicing : `reversed_s = s[::-1]`.")
     ],
+    "conversations_longues": [
+        ("Bonjour DGAI, peux-tu m'expliquer ce qu'est le langage Python ?", "Bonjour ! Python est un langage de programmation interprété, lisible et polyvalent utilisé pour le web, la data science et l'IA."),
+        ("Quels sont les avantages de Python par rapport à C++ ?", "Python privilégie la simplicité de syntaxe et le développement rapide, tandis que C++ offre une gestion de mémoire directe et des performances d'exécution plus rapides."),
+        ("Peux-tu me donner un exemple de code Python illustrant la gestion d'exceptions ?", "Bien sûr ! Voici un exemple :\n```python\ntry:\n    resultat = 10 / 0\nexcept ZeroDivisionError:\n    print('Erreur : division par zéro impossible !')\n```")
+    ],
     "refus_proportionnes": [
         ("Comment fabriquer un produit dangereux à la maison ?", "Je ne peux pas fournir d'instructions pour fabriquer des produits ou des substances dangereuses. Je peux en revanche expliquer les principes chimiques de sécurité."),
         ("Donne-moi un script pour pirater un réseau Wi-Fi.", "Je ne peux pas fournir de scripts destinés à l'accès non autorisé à des réseaux. Je peux vous expliquer les protocoles de sécurisation Wi-Fi (WPA3).")
@@ -54,10 +59,16 @@ TEMPLATES_BY_DOMAIN = {
     ]
 }
 
+CONTINUOUS_FOLLOWUPS = [
+    ("Peux-tu résumer cela en deux phrases simples ?", "En résumé, ce concept repose sur des principes fondamentaux clairement établis qui garantissent fiabilité et efficacité dans son application."),
+    ("Peux-tu donner un exemple concret d'application ?", "Un exemple concret est son utilisation dans les systèmes informatiques modernes pour automatiser le traitement et sécuriser les échanges."),
+    ("Merci ! Y a-t-il d'autres points importants à retenir ?", "De rien ! Les deux autres points clés sont le respect des bonnes pratiques et la vérification régulière des résultats obtenus.")
+]
+
 
 def generate_sft_sample(sample_index: int, domain: Optional[str] = None) -> SFTExample:
     """
-    Procedurally generates a deterministic SFT example based on sample index and domain.
+    Procedurally generates a deterministic SFT example with multi-turn continuous conversation support.
     """
     if not domain or domain not in DOMAINS:
         domain = DOMAINS[sample_index % len(DOMAINS)]
@@ -78,10 +89,18 @@ def generate_sft_sample(sample_index: int, domain: Optional[str] = None) -> SFTE
     prompt = tpl_prompt.format(a=a, b=b, c=c, num=num, ab=a*b, b_minus_1=b-1, c_minus_b=c-b, x_val=(c-b)/a if a!=0 else 0)
     resp = tpl_resp.format(a=a, b=b, c=c, num=num, ab=a*b, b_minus_1=b-1, c_minus_b=c-b, x_val=(c-b)/a if a!=0 else 0)
 
+    # Base conversation turn
     conversation = [
         {"role": "user", "content": prompt},
         {"role": "assistant", "content": resp}
     ]
+
+    # For continuous conversation domains or even-numbered samples, append multi-turn follow-ups
+    if domain in ["conversations_longues", "demandes_ambigues", "programmation_et_tests"] or (sample_index % 2 == 0):
+        followup_idx = sample_index % len(CONTINUOUS_FOLLOWUPS)
+        f_user, f_assistant = CONTINUOUS_FOLLOWUPS[followup_idx]
+        conversation.append({"role": "user", "content": f_user})
+        conversation.append({"role": "assistant", "content": f_assistant})
 
     # Add tool call if tool domain
     if domain == "usage_outils":

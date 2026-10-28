@@ -42,7 +42,7 @@ def generate_1M_corpus(target_dir: str = "data/corpus_1M", total_samples: int = 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate 1 Million SFT samples for DGAI-M4-SPEC")
     parser.add_argument("--dir", type=str, default="data/corpus_1M", help="Target directory for dataset chunks")
-    parser.add_argument("--count", type=int, default=10000, help="Number of samples to generate (default: 10,000 for quick generation, up to 1,000,000)")
+    parser.add_argument("--count", type=int, default=1000000, help="Number of samples to generate (default: 1,000,000)")
     parser.add_argument("--chunk_size", type=int, default=5000, help="Chunk size per JSONL file")
     args = parser.parse_args()
 
