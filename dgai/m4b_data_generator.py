@@ -28,6 +28,22 @@ DOMAINS = [
 ]
 
 TEMPLATES_BY_DOMAIN = {
+    "conversations_longues": [
+        [
+            {"role": "user", "content": "Bonjour ! Comment allez-vous aujourd'hui ?"},
+            {"role": "assistant", "content": "Bonjour ! Je vais très bien, merci. Je suis DGAI, votre assistant virtuel autonome. Comment puis-je vous aider aujourd'hui ?"},
+            {"role": "user", "content": "Pouvez-vous m'expliquer le principe du post-entraînement d'un modèle d'IA ?"},
+            {"role": "assistant", "content": "Le post-entraînement consiste à aligner un modèle de base pré-entraîné en utilisant du réglage fin supervisé (SFT) et de l'apprentissage par préférences (RLAIF/DPO)."},
+            {"role": "user", "content": "Merci pour cette explication très claire !"},
+            {"role": "assistant", "content": "C'est un plaisir ! N'hésitez pas si vous souhaitez approfondir un point spécifique."}
+        ],
+        [
+            {"role": "user", "content": "Bonjour, j'aimerais planifier l'apprentissage du langage Python."},
+            {"role": "assistant", "content": "Bonjour ! C'est un excellent choix. Préférez-vous commencer par la syntaxe de base ou des projets pratiques ?"},
+            {"role": "user", "content": "La syntaxe de base pour commencer."},
+            {"role": "assistant", "content": "Très bien. Nous aborderons les variables, les structures conditionnelles, les boucles et la définition des fonctions."}
+        ]
+    ],
     "questions_factuelles": [
         ("Quelle est la vitesse de la lumière dans le vide ?", "La vitesse de la lumière dans le vide est exactement de 299 792 458 mètres par seconde (environ 300 000 km/s)."),
         ("Qui a énoncé la théorie de la relativité générale ?", "La théorie de la relativité générale a été développée par Albert Einstein et publiée en 1915."),
@@ -58,16 +74,10 @@ TEMPLATES_BY_DOMAIN = {
 def generate_sft_sample(sample_index: int, domain: Optional[str] = None) -> SFTExample:
     """
     Procedurally generates a deterministic SFT example based on sample index and domain.
+    Supports multi-turn continuous conversations starting with greetings.
     """
     if not domain or domain not in DOMAINS:
         domain = DOMAINS[sample_index % len(DOMAINS)]
-
-    templates = TEMPLATES_BY_DOMAIN.get(domain)
-    if templates:
-        tpl_prompt, tpl_resp = templates[sample_index % len(templates)]
-    else:
-        tpl_prompt = f"Demande d'assistance synthétique #{sample_index} concernant le domaine '{domain}'."
-        tpl_resp = f"Réponse structurée et vérifiée de DGAI pour l'exemple #{sample_index} dans le domaine '{domain}'."
 
     # Seed parameters for variability
     a = (sample_index * 7) % 100 + 1
@@ -75,16 +85,33 @@ def generate_sft_sample(sample_index: int, domain: Optional[str] = None) -> SFTE
     c = a * b + 15
     num = (sample_index % 118) + 1
 
-    prompt = tpl_prompt.format(a=a, b=b, c=c, num=num, ab=a*b, b_minus_1=b-1, c_minus_b=c-b, x_val=(c-b)/a if a!=0 else 0)
-    resp = tpl_resp.format(a=a, b=b, c=c, num=num, ab=a*b, b_minus_1=b-1, c_minus_b=c-b, x_val=(c-b)/a if a!=0 else 0)
-
-    conversation = [
-        {"role": "user", "content": prompt},
-        {"role": "assistant", "content": resp}
-    ]
+    templates = TEMPLATES_BY_DOMAIN.get(domain)
+    if templates:
+        tpl = templates[sample_index % len(templates)]
+        if isinstance(tpl, list):
+            # Multi-turn continuous conversation list
+            conversation = [dict(msg) for msg in tpl]
+        else:
+            tpl_prompt, tpl_resp = tpl
+            prompt = tpl_prompt.format(a=a, b=b, c=c, num=num, ab=a*b, b_minus_1=b-1, c_minus_b=c-b, x_val=(c-b)/a if a!=0 else 0)
+            resp = tpl_resp.format(a=a, b=b, c=c, num=num, ab=a*b, b_minus_1=b-1, c_minus_b=c-b, x_val=(c-b)/a if a!=0 else 0)
+            conversation = [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": resp}
+            ]
+    else:
+        # Multi-turn continuous conversation fallback starting with greeting
+        conversation = [
+            {"role": "user", "content": f"Bonjour ! J'ai une question concernant le domaine '{domain}' (échantillon #{sample_index})."},
+            {"role": "assistant", "content": f"Bonjour ! Je suis DGAI. Je vous écoute concernant '{domain}'."},
+            {"role": "user", "content": f"Pouvez-vous me donner les détails synthétiques pour l'élément #{sample_index} ?"},
+            {"role": "assistant", "content": f"Voici l'explication structurée et vérifiée par DGAI pour l'échantillon #{sample_index} dans le domaine '{domain}'."}
+        ]
 
     # Add tool call if tool domain
     if domain == "usage_outils":
+        prompt = f"Quelle est la valeur de {a} multiplié par {b} ?"
+        resp = "Je vais utiliser l'outil calculatrice pour effectuer ce calcul."
         conversation = [
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": resp, "tool_calls": [{"id": f"call_{sample_index}", "type": "function", "function": {"name": "calculator", "arguments": f"{{\"a\": {a}, \"b\": {b}}}"}}]},

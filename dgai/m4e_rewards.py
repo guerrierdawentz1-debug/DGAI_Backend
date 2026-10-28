@@ -18,21 +18,34 @@ FORBIDDEN_AST_NODES = (
 
 FORBIDDEN_NAMES = {
     "os", "sys", "subprocess", "shutil", "importlib", "eval", "exec", "open",
-    "__import__", "__builtins__", "__class__", "__subclasses__", "__mro__", "__bases__"
+    "compile", "getattr", "setattr", "delattr", "globals", "locals", "vars", "dir",
+    "input", "__import__", "__builtins__", "__class__", "__subclasses__", "__mro__", "__bases__"
+}
+
+ALLOWED_BUILTIN_CALLS = {
+    "len", "range", "sum", "min", "max", "abs", "round", "int", "float", "str", "bool",
+    "list", "dict", "set", "tuple", "sorted", "enumerate", "zip", "all", "any", "filter", "map",
+    "isinstance", "issubclass", "print"
 }
 
 
 def _is_safe_ast(tree: ast.AST) -> Tuple[bool, str]:
     """
-    Validates that AST contains no imports or dangerous call names / reflection access.
+    Validates that AST contains no imports, reflection, or unauthorized function calls/access.
     """
     for node in ast.walk(tree):
         if isinstance(node, FORBIDDEN_AST_NODES):
             return False, "Les instructions 'import' ne sont pas autorisées dans la sandbox de récompense."
-        if isinstance(node, ast.Name) and (node.id in FORBIDDEN_NAMES or node.id.startswith("__")):
-            return False, f"L'accès à '{node.id}' est interdit dans la sandbox."
-        if isinstance(node, ast.Attribute) and (node.attr in FORBIDDEN_NAMES or node.attr.startswith("__")):
-            return False, f"L'attribut '{node.attr}' est interdit dans la sandbox."
+        if isinstance(node, ast.Name):
+            if node.id in FORBIDDEN_NAMES or node.id.startswith("__"):
+                return False, f"L'accès à '{node.id}' est interdit dans la sandbox."
+        if isinstance(node, ast.Attribute):
+            if node.attr in FORBIDDEN_NAMES or node.attr.startswith("__"):
+                return False, f"L'attribut '{node.attr}' est interdit dans la sandbox."
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                if node.func.id not in ALLOWED_BUILTIN_CALLS and node.func.id in FORBIDDEN_NAMES:
+                    return False, f"La fonction '{node.func.id}' est interdite dans la sandbox."
     return True, "Safe"
 
 
@@ -162,9 +175,10 @@ def verify_code_reward(code_str: str, unit_test_func_name: str, test_cases: List
 
         try:
             proc = subprocess.run(
-                [sys.executable, tmp_path],
+                [sys.executable, "-I", tmp_path],
                 capture_output=True,
                 text=True,
+                env={"LC_ALL": "C", "PATH": ""},
                 timeout=2.0
             )
             if proc.returncode != 0:
