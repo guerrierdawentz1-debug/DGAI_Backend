@@ -110,14 +110,37 @@ def chat_assistant_pipeline(messages: List[Dict[str, Any]], style: str = "detail
         tool_calls_executed.append({"tool_name": "get_current_time", "result": time_data})
         base_response = f"Actuellement, nous sommes le {time_data['date']} ({time_data['day_of_week']}) et il est {time_data['time']} ({time_data['timezone']})."
 
-    elif any(k in lower_prompt for k in ["calcule", "combien font"]) or re.search(r'\b\d+\s*[\+\-\*\/\^]\s*\d+\b', lower_prompt):
+    elif any(k in lower_prompt for k in ["calcule", "combien font", "ce résultat", "résultat précédent"]) or re.search(r'\b\d+\s*[\+\-\*\/\^]\s*\d+\b', lower_prompt) or (("ajoute" in lower_prompt or "multiplie" in lower_prompt or "soustrais" in lower_prompt or "divise" in lower_prompt) and any(m.get("role") == "assistant" for m in messages)):
         # Extract math expression tokens supporting multi-char operators like **
         math_tokens = re.findall(r'\d+(?:\.\d+)?|\*\*|[\+\-\*\/\^\(\)]', prompt)
         clean_expr = " ".join(math_tokens).strip() if math_tokens else prompt
+
+        # Context resolution for follow-up turns in continuous conversations
+        if any(ref in lower_prompt for ref in ["ce résultat", "résultat précédent", "à ce résultat", "par ce résultat"]) or (any(k in lower_prompt for k in ["ajoute", "multiplie", "soustrais", "divise"]) and len(math_tokens) <= 1):
+            prev_num = None
+            for m in reversed(messages[:-1]):
+                if m.get("role") == "assistant":
+                    nums = re.findall(r'\b\d+(?:\.\d+)?\b', m.get("content", ""))
+                    if nums:
+                        prev_num = nums[-1]
+                        break
+            if prev_num:
+                op_match = re.search(r'(ajoute|plus|\+|\-|multiplie|fois|\*|divise|\/)\s*(\d+(?:\.\d+)?)', lower_prompt)
+                if op_match:
+                    op_word, val = op_match.groups()
+                    if op_word in ["ajoute", "plus", "+"]:
+                        clean_expr = f"{prev_num} + {val}"
+                    elif op_word in ["multiplie", "fois", "*"]:
+                        clean_expr = f"{prev_num} * {val}"
+                    elif op_word in ["soustrais", "moins", "-"]:
+                        clean_expr = f"{prev_num} - {val}"
+                    elif op_word in ["divise", "/"]:
+                        clean_expr = f"{prev_num} / {val}"
+
         calc_data = calculator(clean_expr)
         tool_calls_executed.append({"tool_name": "calculator", "result": calc_data})
         if calc_data.get("status") == "success":
-            base_response = f"Le résultat du calcul est {calc_data['result']}."
+            base_response = f"Le résultat du calcul me donne {calc_data['result']}."
         else:
             base_response = f"Impossible d'évaluer le calcul : {calc_data.get('error')}."
 

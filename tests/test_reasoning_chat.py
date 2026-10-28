@@ -92,3 +92,32 @@ def test_ask_api_endpoint(client):
     assert data["status"] == "success"
     assert "response" in data
     assert len(data["reasoning_steps"]) >= 1
+
+
+def test_continuous_conversation_starting_with_greeting(client):
+    # Turn 1: Greeting
+    messages = [{"role": "user", "content": "Bonjour"}]
+    res1 = chat_assistant_pipeline(messages)
+    assert res1["status"] == "success"
+    assert "Bonjour" in res1["response"]
+    messages.append({"role": "assistant", "content": res1["response"]})
+
+    # Turn 2: Initial question
+    messages.append({"role": "user", "content": "Combien font 50 * 2 ?"})
+    res2 = chat_assistant_pipeline(messages)
+    assert res2["status"] == "success"
+    assert "100" in res2["response"]
+    messages.append({"role": "assistant", "content": res2["response"]})
+
+    # Turn 3: Follow-up referencing previous result
+    messages.append({"role": "user", "content": "Ajoute 20 à ce résultat"})
+    res3 = chat_assistant_pipeline(messages)
+    assert res3["status"] == "success"
+    assert "120" in res3["response"]
+
+    # Test via API endpoint
+    rv = client.post('/api/v1/chat', json={"messages": messages, "style": "short"})
+    assert rv.status_code == 200
+    data = json.loads(rv.data)
+    assert data["status"] == "success"
+    assert "120" in data["response"]
