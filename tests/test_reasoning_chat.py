@@ -39,6 +39,11 @@ def test_chat_pipeline_time_and_math():
     assert res_math["tool_calls"][0]["tool_name"] == "calculator"
     assert "180" in res_math["response"]
 
+    # Function math question
+    res_sqrt = chat_assistant_pipeline([{"role": "user", "content": "Calcule sqrt(144)"}])
+    assert res_sqrt["status"] == "success"
+    assert "12" in res_sqrt["response"]
+
 
 def test_greetings_and_general_queries():
     # Greeting "Bonjour" should NOT trigger time tool

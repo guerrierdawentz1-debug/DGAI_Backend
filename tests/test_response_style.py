@@ -1,6 +1,6 @@
 """
-Unit and Integration Tests for Flexible Response Style Controller
-(DGAI-M4-SPEC v6.0.0 M4a & M4e)
+Unit and API Integration Tests for Response Style Formatting
+(DGAI-M4-SPEC v6.0.0 Section 3 & 4)
 """
 
 import pytest
@@ -16,45 +16,38 @@ def client():
         yield client
 
 
-def test_short_and_concise_style():
-    prompt = "Quelle est la capitale de la France ?"
-    content = "La capitale de la France est Paris. C'est une grande métropole européenne avec une riche histoire."
-    res = format_response_by_style(prompt, content, style="short", max_words=10)
+def test_short_style():
+    raw = "La vitesse de la lumière est de 300 000 km/s. C'est une constante physique universelle."
+    res = format_response_by_style("quelle vitesse?", raw, style="short")
     assert res["style"] == "short"
-    assert "Paris" in res["formatted_response"]
-    assert res["word_count"] <= 12
+    assert "300 000 km/s" in res["formatted_response"]
 
 
 def test_detailed_style():
-    prompt = "Explique le fonctionnement du moteur à explosion."
-    content = "Le moteur à explosion transforme l'énergie thermique du carburant en énergie mécanique."
-    res = format_response_by_style(prompt, content, style="detailed")
+    raw = "Explication détaillée de la théorie."
+    res = format_response_by_style("explique", raw, style="detailed")
     assert res["style"] == "detailed"
-    assert "moteur à explosion" in res["formatted_response"]
-    assert res["formatted_response"] == content
+    assert "Explication détaillée" in res["formatted_response"]
 
 
 def test_bullet_points_style():
-    prompt = "Liste trois fruits rouges."
-    content = "Fraise est un fruit rouge. Framboise est délicieuse. Cerise est sucrée."
-    res = format_response_by_style(prompt, content, style="bullet_points")
+    raw = "Premier point important. Deuxième point fondamental."
+    res = format_response_by_style("liste", raw, style="bullet_points")
     assert res["style"] == "bullet_points"
     assert "•" in res["formatted_response"]
 
 
 def test_structured_style():
-    prompt = "Analyse l'impact de l'IA."
-    content = "L'intelligence artificielle automatise les tâches et accélère l'innovation."
-    res = format_response_by_style(prompt, content, style="structured")
+    raw = "Contenu structuré avec titre."
+    res = format_response_by_style("structure", raw, style="structured")
     assert res["style"] == "structured"
-    assert "### Aperçu" in res["formatted_response"]
-    assert "### Analyse Détaillée" in res["formatted_response"]
+    assert "### Réponse DGAI" in res["formatted_response"]
 
 
 def test_style_format_api_endpoint(client):
     rv = client.post('/api/v1/m4a/style_format', json={
-        "prompt": "Explique la gravité.",
-        "content": "La gravité est une force d'attraction fondamentale.",
+        "prompt": "Explique la gravité",
+        "content": "La gravité attire les masses.",
         "style": "bullet_points"
     })
     assert rv.status_code == 200

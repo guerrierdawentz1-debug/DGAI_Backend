@@ -111,8 +111,11 @@ def chat_assistant_pipeline(messages: List[Dict[str, Any]], style: str = "detail
         base_response = f"Actuellement, nous sommes le {time_data['date']} ({time_data['day_of_week']}) et il est {time_data['time']} ({time_data['timezone']})."
 
     elif any(k in lower_prompt for k in ["calcule", "combien font"]) or re.search(r'\b\d+\s*[\+\-\*\/\^]\s*\d+\b', lower_prompt):
-        # Extract math expression tokens supporting multi-char operators like **
-        math_tokens = re.findall(r'\d+(?:\.\d+)?|\*\*|[\+\-\*\/\^\(\)]', prompt)
+        raw_expr = prompt
+        for prefix in ["calcule", "Calcule", "combien font", "Combien font"]:
+            raw_expr = raw_expr.replace(prefix, "")
+        math_tokens = re.findall(r'\d+(?:\.\d+)?|[a-zA-Z_]+\b|\*\*|[\+\-\*\/\^\(\),]', raw_expr)
+        math_tokens = [t for t in math_tokens if t.lower() not in ["de", "est", "la", "le", "et", "du", "que", "combien", "font", "calculer"]]
         clean_expr = " ".join(math_tokens).strip() if math_tokens else prompt
         calc_data = calculator(clean_expr)
         tool_calls_executed.append({"tool_name": "calculator", "result": calc_data})

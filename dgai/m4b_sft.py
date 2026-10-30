@@ -1,13 +1,13 @@
 """
-DGAI M4b — Supervised Fine-Tuning (SFT) Corpus, Metadata & Decontamination (DGAI-M4-SPEC v6.0.0)
+DGAI M4b — Supervised Fine-Tuning (SFT) Corpus Management & Decontamination
+(DGAI-M4-SPEC v6.0.0 Section 4)
 """
 
-import hashlib
 import json
 import os
 import glob
 import re
-from typing import List, Dict, Any, Set, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
 
 class SFTExample:
@@ -19,124 +19,85 @@ class SFTExample:
         self.quality_score = quality_score
         self.license_type = license_type
 
-    def get_content_text(self) -> str:
-        text_parts = []
-        for msg in self.conversation:
-            text_parts.append(f"{msg.get('content', '')}")
-        return "\n".join(text_parts)
-
-    def compute_hash(self) -> str:
-        return hashlib.sha256(self.get_content_text().encode('utf-8')).hexdigest()
-
     def to_dict(self) -> Dict[str, Any]:
         return {
             "example_id": self.example_id,
             "conversation": self.conversation,
-            "metadata": {
-                "source": self.source,
-                "domain": self.domain,
-                "quality_score": self.quality_score,
-                "license_type": self.license_type,
-                "hash": self.compute_hash()
-            }
+            "source": self.source,
+            "domain": self.domain,
+            "quality_score": self.quality_score,
+            "license_type": self.license_type
         }
 
 
-def load_sft_corpus(filepath: str = "data/sft_corpus.json") -> List[SFTExample]:
+def load_sft_corpus(filepath: str = "data/sft_corpus_5k.json") -> List[SFTExample]:
     examples = []
-
-    # Check default file and 5k corpus file
-    files_to_load = [filepath]
-    five_k_path = "data/sft_corpus_5k.json"
-    if os.path.exists(five_k_path) and five_k_path not in files_to_load:
-        files_to_load.append(five_k_path)
-
-    for fpath in files_to_load:
-        if not os.path.exists(fpath):
-            continue
-        with open(fpath, 'r', encoding='utf-8') as f:
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
             raw_list = json.load(f)
-
-        for raw in raw_list:
-            meta = raw.get("metadata", {})
-            examples.append(SFTExample(
-                example_id=raw.get("example_id", "unk"),
-                conversation=raw.get("conversation", []),
-                source=meta.get("source", raw.get("source", "unknown")),
-                domain=meta.get("domain", raw.get("domain", "general")),
-                quality_score=meta.get("quality_score", raw.get("quality_score", 1.0)),
-                license_type=meta.get("license_type", raw.get("license_type", "open"))
-            ))
+            for idx, item in enumerate(raw_list):
+                examples.append(SFTExample(
+                    example_id=item.get("example_id", f"ex_{idx}"),
+                    conversation=item.get("conversation", []),
+                    source=item.get("source", "sft_corpus"),
+                    domain=item.get("domain", "general"),
+                    quality_score=item.get("quality_score", 1.0),
+                    license_type=item.get("license_type", "open")
+                ))
+    else:
+        from dgai.m4b_data_generator import generate_sft_batch
+        examples = generate_sft_batch(0, 5000)
     return examples
 
 
 def load_sft_corpus_chunked(dir_path: str = "data/corpus_1M", offset: int = 0, limit: int = 100) -> Tuple[List[SFTExample], int]:
-    """
-    Streams and reads entries from chunked JSONL files in dir_path with pagination (offset & limit).
-    """
-    if not os.path.exists(dir_path):
-        return [], 0
-
     jsonl_files = sorted(glob.glob(os.path.join(dir_path, "*.jsonl")))
-    total_count = 0
-    selected_examples = []
+    all_examples = []
 
     for fpath in jsonl_files:
         with open(fpath, "r", encoding="utf-8") as f:
             for line in f:
-                if not line.strip():
-                    continue
-                if total_count >= offset and len(selected_examples) < limit:
-                    raw = json.loads(line)
-                    meta = raw.get("metadata", {})
-                    selected_examples.append(SFTExample(
-                        example_id=raw.get("example_id", "unk"),
-                        conversation=raw.get("conversation", []),
-                        source=meta.get("source", "unknown"),
-                        domain=meta.get("domain", "general"),
-                        quality_score=meta.get("quality_score", 1.0),
-                        license_type=meta.get("license_type", "open")
+                if line.strip():
+                    item = json.loads(line)
+                    all_examples.append(SFTExample(
+                        example_id=item.get("example_id"),
+                        conversation=item.get("conversation", []),
+                        source=item.get("source", "chunked_corpus"),
+                        domain=item.get("domain", "general"),
+                        quality_score=item.get("quality_score", 1.0),
+                        license_type=item.get("license_type", "open")
                     ))
-                total_count += 1
 
-    return selected_examples, total_count
+    total_count = len(all_examples)
+    selected = all_examples[offset:offset + limit]
+    return selected, total_count
 
 
 def deduplicate_examples(examples: List[SFTExample]) -> List[SFTExample]:
-    seen_hashes: Set[str] = set()
+    seen_prompts = set()
     deduped = []
     for ex in examples:
-        h = ex.compute_hash()
-        if h not in seen_hashes:
-            seen_hashes.add(h)
+        user_msg = next((m.get("content", "").strip() for m in ex.conversation if m.get("role") == "user"), "")
+        if user_msg and user_msg not in seen_prompts:
+            seen_prompts.add(user_msg)
             deduped.append(ex)
     return deduped
 
 
-def decontaminate(train_examples: List[SFTExample], eval_benchmark_prompts: List[str], similarity_threshold: float = 0.8) -> Tuple[List[SFTExample], int]:
-    """
-    Filters out training examples that overlap significantly with evaluation benchmark prompts.
-    """
+def decontaminate(examples: List[SFTExample], eval_benchmark_prompts: List[str], similarity_threshold: float = 0.8) -> Tuple[List[SFTExample], int]:
     clean_examples = []
     removed_count = 0
 
-    # Tokenize eval prompts
-    eval_token_sets = [set(re.findall(r'\w+', p.lower())) for p in eval_benchmark_prompts if p.strip()]
+    eval_clean_set = set([p.lower().strip() for p in eval_benchmark_prompts])
 
-    for ex in train_examples:
-        content = ex.get_content_text().lower()
-        ex_tokens = set(re.findall(r'\w+', content))
+    for ex in examples:
+        user_msg = next((m.get("content", "").lower().strip() for m in ex.conversation if m.get("role") == "user"), "")
+
         is_contaminated = False
-
-        if ex_tokens:
-            for eval_tokens in eval_token_sets:
-                if not eval_tokens:
-                    continue
-                intersection = ex_tokens.intersection(eval_tokens)
-                jaccard = len(intersection) / float(len(eval_tokens))  # ratio of benchmark tokens found in example
-                if jaccard >= similarity_threshold:
-                    is_contaminated = True
-                    break
+        for eval_p in eval_clean_set:
+            if user_msg == eval_p or (len(eval_p) > 10 and eval_p in user_msg):
+                is_contaminated = True
+                break
 
         if is_contaminated:
             removed_count += 1

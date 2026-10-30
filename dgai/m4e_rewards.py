@@ -1,196 +1,138 @@
 """
-DGAI M4e — Verifiable Reward Engine (DGAI-M4-SPEC v6.0.0)
+DGAI M4e — Verifiable Rewards Engine & Sandboxed Code/Math Verifiers
+(DGAI-M4-SPEC v6.0.0 Section 7)
 """
 
 import ast
 import json
 import os
+import re
 import sys
-import tempfile
 import subprocess
-import xml.etree.ElementTree as ET
-from typing import Dict, Any, List, Union, Tuple
-
-FORBIDDEN_AST_NODES = (
-    ast.Import,
-    ast.ImportFrom,
-)
-
-FORBIDDEN_NAMES = {
-    "os", "sys", "subprocess", "shutil", "importlib", "eval", "exec", "open",
-    "__import__", "__builtins__", "__class__", "__subclasses__", "__mro__", "__bases__"
-}
-
-
-def _is_safe_ast(tree: ast.AST) -> Tuple[bool, str]:
-    """
-    Validates that AST contains no imports or dangerous call names / reflection access.
-    """
-    for node in ast.walk(tree):
-        if isinstance(node, FORBIDDEN_AST_NODES):
-            return False, "Les instructions 'import' ne sont pas autorisées dans la sandbox de récompense."
-        if isinstance(node, ast.Name) and (node.id in FORBIDDEN_NAMES or node.id.startswith("__")):
-            return False, f"L'accès à '{node.id}' est interdit dans la sandbox."
-        if isinstance(node, ast.Attribute) and (node.attr in FORBIDDEN_NAMES or node.attr.startswith("__")):
-            return False, f"L'attribut '{node.attr}' est interdit dans la sandbox."
-    return True, "Safe"
+import tempfile
+from typing import Dict, Any, List, Optional, Union, Tuple
 
 
 def verify_math_reward(expected_val: Union[int, float], model_output: str, tolerance: float = 1e-4) -> Dict[str, Any]:
-    """
-    Verifies numerical math answer extracted from response.
-    """
-    try:
-        import re
-        numbers = re.findall(r"[-+]?\d*\.\d+|\d+", model_output)
-        if not numbers:
-            return {"correct": False, "reward": 0.0, "extracted": None, "expected": expected_val, "reason": "Aucun nombre extrait."}
+    numbers = re.findall(r'-?\d+(?:\.\d+)?', model_output)
+    if not numbers:
+        return {"correct": False, "reward": 0.0, "reason": "Aucun nombre trouvé dans la réponse du modèle."}
 
-        extracted_float = float(numbers[-1])
-        is_correct = abs(extracted_float - float(expected_val)) <= tolerance
-        reward = 1.0 if is_correct else 0.0
+    parsed_nums = [float(n) for n in numbers]
+    for num in parsed_nums:
+        if abs(num - float(expected_val)) <= tolerance:
+            return {"correct": True, "reward": 1.0, "extracted_val": num, "expected": expected_val}
 
-        return {
-            "correct": is_correct,
-            "reward": reward,
-            "extracted": extracted_float,
-            "expected": expected_val,
-            "reason": "Réponse exacte dans la tolérance." if is_correct else f"Écart supérieur à la tolérance ({tolerance})."
-        }
-    except Exception as e:
-        return {"correct": False, "reward": 0.0, "extracted": None, "expected": expected_val, "reason": str(e)}
+    return {"correct": False, "reward": 0.0, "extracted_nums": parsed_nums, "expected": expected_val}
 
 
-def verify_format_reward(model_output: str, expected_format: str = "json", required_keys: List[str] = None) -> Dict[str, Any]:
-    """
-    Verifies JSON or XML structural conformity.
-    """
+def verify_format_reward(model_output: str, expected_format: str = "json", required_keys: Optional[List[str]] = None) -> Dict[str, Any]:
+    clean_str = model_output.strip()
+
     if expected_format.lower() == "json":
-        try:
-            clean_output = model_output.strip()
-            if "```json" in clean_output:
-                clean_output = clean_output.split("```json")[1].split("```")[0].strip()
-            elif "```" in clean_output:
-                clean_output = clean_output.split("```")[1].split("```")[0].strip()
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', clean_str, re.DOTALL)
+        if json_match:
+            clean_str = json_match.group(1)
 
-            parsed = json.loads(clean_output)
+        try:
+            parsed = json.loads(clean_str)
             if required_keys:
                 missing = [k for k in required_keys if k not in parsed]
                 if missing:
-                    return {"valid": False, "reward": 0.5, "reason": f"Champs obligatoires manquants: {missing}"}
-            return {"valid": True, "reward": 1.0, "reason": "Format JSON valide."}
+                    return {"valid": False, "reward": 0.5, "error": f"Clés obligatoires manquantes: {missing}"}
+            return {"valid": True, "reward": 1.0, "parsed_json": parsed}
         except Exception as e:
-            return {"valid": False, "reward": 0.0, "reason": f"Erreur de syntaxe JSON: {str(e)}"}
+            return {"valid": False, "reward": 0.0, "error": f"JSON invalide: {str(e)}"}
 
-    elif expected_format.lower() == "xml":
-        try:
-            clean_output = model_output.strip()
-            if "```xml" in clean_output:
-                clean_output = clean_output.split("```xml")[1].split("```")[0].strip()
-            elif "```" in clean_output:
-                clean_output = clean_output.split("```")[1].split("```")[0].strip()
+    return {"valid": False, "reward": 0.0, "error": f"Format '{expected_format}' non pris en charge."}
 
-            ET.fromstring(clean_output)
-            return {"valid": True, "reward": 1.0, "reason": "Format XML valide."}
-        except Exception as e:
-            return {"valid": False, "reward": 0.0, "reason": f"Erreur de syntaxe XML: {str(e)}"}
 
-    return {"valid": False, "reward": 0.0, "reason": f"Format inconnu: {expected_format}"}
+def _is_safe_ast(code_str: str) -> Tuple[bool, str]:
+    try:
+        tree = ast.parse(code_str)
+    except Exception as e:
+        return False, f"Erreur de syntaxe Python : {e}"
+
+    FORBIDDEN_IMPORTS = {'os', 'sys', 'subprocess', 'shutil', 'socket', 'urllib', 'requests', 'ctypes', 'importlib', 'builtins', 'pathlib', 'signal', 'multiprocessing'}
+    FORBIDDEN_DUNDERS = {'__class__', '__subclasses__', '__mro__', '__bases__', '__import__', '__globals__', '__code__', '__builtins__', '__dict__', '__getattribute__', '__setattr__'}
+    FORBIDDEN_BUILTINS = {'open', 'eval', 'exec', 'compile', 'globals', 'locals', 'getattr', 'setattr', 'delattr', 'input', 'breakpoint', '__import__', 'file'}
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [alias.name for alias in node.names]
+            if isinstance(node, ast.ImportFrom) and node.module:
+                names.append(node.module)
+            for n in names:
+                top_module = n.split('.')[0]
+                if top_module in FORBIDDEN_IMPORTS:
+                    return False, f"Importation interdite détectée : '{top_module}'"
+
+        if isinstance(node, ast.Attribute):
+            if node.attr in FORBIDDEN_DUNDERS or node.attr in FORBIDDEN_BUILTINS:
+                return False, f"Accès à l'attribut/méthode interdit : '{node.attr}'"
+
+        if isinstance(node, ast.Name):
+            if node.id in FORBIDDEN_DUNDERS or node.id in FORBIDDEN_BUILTINS:
+                return False, f"Utilisation de fonction/nom système interdit : '{node.id}'"
+
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and (node.func.id in FORBIDDEN_BUILTINS or node.func.id in FORBIDDEN_DUNDERS):
+                return False, f"Appel de fonction système interdit : '{node.func.id}'"
+
+    return True, "Code AST sécurisé"
 
 
 def verify_code_reward(code_str: str, unit_test_func_name: str, test_cases: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Evaluates Python code snippet against test cases in an isolated subprocess sandbox.
+    Safely verifies Python code through AST static analysis, syntax validation,
+    function signature inspection, and AST-level safe math/logic evaluation.
     """
+    safe, ast_msg = _is_safe_ast(code_str)
+    if not safe:
+        return {"passed": False, "reward": 0.0, "error": ast_msg, "security_violation": True}
+
     try:
-        # Validate function name identifier
-        if not unit_test_func_name.isidentifier():
-            return {
-                "passed": False,
-                "reward": 0.0,
-                "passed_count": 0,
-                "total_count": len(test_cases),
-                "reason": "Nom de fonction de test invalide."
-            }
-
-        if "```python" in code_str:
-            code_str = code_str.split("```python")[1].split("```")[0]
-        elif "```" in code_str:
-            code_str = code_str.split("```")[1].split("```")[0]
-
-        # Parse AST & validate safety
         tree = ast.parse(code_str)
-        is_safe, safety_msg = _is_safe_ast(tree)
-        if not is_safe:
-            return {
-                "passed": False,
-                "reward": 0.0,
-                "passed_count": 0,
-                "total_count": len(test_cases),
-                "reason": f"Sécurité Sandbox: {safety_msg}"
-            }
-
-        # Safely JSON serialize variables for runner script
-        encoded_test_cases = json.dumps(test_cases)
-        encoded_func_name = json.dumps(unit_test_func_name)
-
-        runner_code = (
-            "import json, sys\n\n"
-            + code_str
-            + "\n\n"
-            + "test_cases = " + encoded_test_cases + "\n"
-            + "func_name = " + encoded_func_name + "\n\n"
-            + "if func_name not in globals():\n"
-            + "    print(json.dumps({'passed': False, 'reason': f'Fonction {func_name} non trouvée.'}))\n"
-            + "    sys.exit(0)\n\n"
-            + "func = globals()[func_name]\n"
-            + "passed = 0\n"
-            + "for tc in test_cases:\n"
-            + "    inp = tc.get('input', [])\n"
-            + "    exp = tc.get('output')\n"
-            + "    if not isinstance(inp, list):\n"
-            + "        inp = [inp]\n"
-            + "    if func(*inp) == exp:\n"
-            + "        passed += 1\n\n"
-            + "total = len(test_cases)\n"
-            + "print(json.dumps({'passed': passed == total, 'passed_count': passed, 'total_count': total, 'reason': f'{passed}/{total} tests réussis.'}))\n"
-        )
-
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tmp:
-            tmp.write(runner_code)
-            tmp_path = tmp.name
-
-        try:
-            proc = subprocess.run(
-                [sys.executable, tmp_path],
-                capture_output=True,
-                text=True,
-                timeout=2.0
-            )
-            if proc.returncode != 0:
-                return {
-                    "passed": False,
-                    "reward": 0.0,
-                    "passed_count": 0,
-                    "total_count": len(test_cases),
-                    "reason": f"Erreur d'exécution sandbox: {proc.stderr.strip() or proc.stdout.strip()}"
-                }
-            res_dict = json.loads(proc.stdout.strip())
-            passed_cnt = res_dict.get("passed_count", 0)
-            total_cnt = res_dict.get("total_count", len(test_cases))
-            reward = passed_cnt / float(total_cnt) if total_cnt > 0 else 0.0
-            return {
-                "passed": res_dict.get("passed", False),
-                "reward": round(reward, 2),
-                "passed_count": passed_cnt,
-                "total_count": total_cnt,
-                "reason": res_dict.get("reason", "")
-            }
-        finally:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-
-    except subprocess.TimeoutExpired:
-        return {"passed": False, "reward": 0.0, "passed_count": 0, "total_count": len(test_cases), "reason": "Dépassement du temps limite (2s) dans la sandbox."}
     except Exception as e:
-        return {"passed": False, "reward": 0.0, "passed_count": 0, "total_count": len(test_cases), "reason": f"Erreur d'exécution: {str(e)}"}
+        return {"passed": False, "reward": 0.0, "error": f"Erreur de syntaxe Python: {e}"}
+
+    # Verify target function definition exists in AST
+    target_func = None
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == unit_test_func_name:
+            target_func = node
+            break
+
+    if not target_func:
+        return {"passed": False, "reward": 0.0, "error": f"La fonction '{unit_test_func_name}' n'est pas définie dans le code fourni."}
+
+    # Evaluate test cases using safe in-memory restricted AST execution
+    passed_count = 0
+    total_cases = len(test_cases)
+
+    # Build safe isolated local namespace for pure functions
+    local_scope = {}
+    try:
+        compiled_code = compile(tree, filename="<reward_sandbox>", mode="exec")
+        exec(compiled_code, {"__builtins__": {"range": range, "len": len, "sum": sum, "min": min, "max": max, "abs": abs, "list": list, "dict": dict, "int": int, "float": float, "str": str, "bool": bool}}, local_scope)
+
+        func_obj = local_scope.get(unit_test_func_name)
+        if callable(func_obj):
+            for tc in test_cases:
+                args = tc.get("args", [])
+                expected = tc.get("expected")
+                res = func_obj(*args)
+                if res == expected:
+                    passed_count += 1
+
+            reward = float(passed_count / total_cases) if total_cases > 0 else 0.0
+            return {
+                "passed": passed_count == total_cases and total_cases > 0,
+                "reward": reward,
+                "passed_count": passed_count,
+                "total_count": total_cases
+            }
+    except Exception as e:
+        return {"passed": False, "reward": 0.0, "error": f"Erreur d'évaluation sécurisée : {str(e)}"}
+
+    return {"passed": False, "reward": 0.0, "error": "Évaluation impossible."}
