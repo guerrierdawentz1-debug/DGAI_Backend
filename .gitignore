@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.pkl
+.pytest_cache/
+data/corpus_1M/
+data/sft_corpus_5k.json
