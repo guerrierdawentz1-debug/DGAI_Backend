@@ -48,6 +48,12 @@ def get_password_hash(password: str) -> str:
     return hashed.decode("utf-8")
 
 
+# Tolérance maximale de décalage d'horloge (clock skew) en secondes
+CLOCK_SKEW_TOLERANCE_SECONDS = 60
+# Durée de vie maximale absolue autorisée pour un jeton JWT (24 heures)
+MAX_TOKEN_LIFESPAN_SECONDS = 24 * 3600
+
+
 def create_access_token(
     subject: str,
     role: Role = Role.USER,
@@ -56,14 +62,18 @@ def create_access_token(
 ) -> str:
     """
     Génère un jeton JWT signé avec expiration et rôle assigné.
+    Vérifie que la durée de vie n'excède pas la limite maximale autorisée.
     """
     settings = get_settings()
     now = datetime.now(timezone.utc)
 
     if expires_delta:
+        if expires_delta.total_seconds() > MAX_TOKEN_LIFESPAN_SECONDS:
+            raise ValueError(f"La durée de vie du jeton excède le maximum autorisé ({MAX_TOKEN_LIFESPAN_SECONDS}s).")
         expire = now + expires_delta
     else:
-        expire = now + timedelta(minutes=settings.jwt_access_token_expire_minutes)
+        expire_minutes = min(settings.jwt_access_token_expire_minutes, 1440)
+        expire = now + timedelta(minutes=expire_minutes)
 
     to_encode: Dict[str, Any] = {
         "sub": subject,
@@ -119,10 +129,22 @@ def decode_access_token(token: str) -> TokenData:
         if exp is None:
             raise ValueError("Le jeton doit obligatoirement comporter un champ d'expiration ('exp').")
 
-        # Vérifier que iat <= exp
+        # Vérifier iat et exp
         iat: Optional[int] = payload.get("iat")
-        if iat is not None and exp < iat:
+        if iat is None:
+            raise ValueError("Le jeton doit obligatoirement comporter un champ d'émission ('iat').")
+
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        # Refuser un iat situé dans le futur au-delà de la tolérance d'horloge
+        if iat > now_ts + CLOCK_SKEW_TOLERANCE_SECONDS:
+            raise ValueError(f"Date d'émission 'iat' située dans le futur au-delà de la tolérance ({CLOCK_SKEW_TOLERANCE_SECONDS}s).")
+
+        if exp < iat:
             raise ValueError("Le jeton comporte une date d'expiration antérieure à sa date d'émission.")
+
+        # Refuser une durée de vie excédant le maximum absolu
+        if exp - iat > MAX_TOKEN_LIFESPAN_SECONDS:
+            raise ValueError(f"La durée de validité du jeton ({exp - iat}s) dépasse la limite maximale ({MAX_TOKEN_LIFESPAN_SECONDS}s).")
 
         return TokenData(sub=subject, role=role, exp=exp)
 

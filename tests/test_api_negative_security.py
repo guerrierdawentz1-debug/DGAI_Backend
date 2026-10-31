@@ -126,3 +126,63 @@ def test_audit_event_correlation_id_and_failsafe():
     assert event["correlation_id"] == "test-cid-999"
     assert event["details"]["password"] == "[REDACTED]"
     assert event["details"]["token"] == "[REDACTED]"
+
+
+def test_jwt_reject_future_iat():
+    """Vérifie le rejet d'un jeton dont la date 'iat' est située dans le futur au delà de 60s."""
+    settings = DGAISettings()
+    future_iat = int(datetime.now(timezone.utc).timestamp()) + 120  # +2 minutes
+    payload = {"sub": "future_user", "role": "user", "iat": future_iat, "exp": future_iat + 3600}
+    token_future = jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+    with pytest.raises(ValueError) as exc:
+        decode_access_token(token_future)
+    assert "futur" in str(exc.value).lower()
+
+
+def test_jwt_reject_excessive_lifespan():
+    """Vérifie le rejet d'un jeton dont la validité dépasse la limite maximale absolue de 24h."""
+    settings = DGAISettings()
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    excessive_exp = now_ts + (48 * 3600)  # 48 heures
+    payload = {"sub": "greedy_user", "role": "user", "iat": now_ts, "exp": excessive_exp}
+    token_long = jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+    with pytest.raises(ValueError) as exc:
+        decode_access_token(token_long)
+    assert "dépasse la limite" in str(exc.value).lower()
+
+
+def test_rate_limiter_max_capacity_eviction():
+    """Vérifie que le limiteur évince des clés si la capacité maximale de 10 000 est atteinte."""
+    limiter = InMemoryRateLimiter(requests_per_minute=5)
+    limiter.MAX_TRACKED_IDENTIFIERS = 3  # Réduire temporairement le seuil pour le test
+
+    limiter.is_allowed("client_A")
+    limiter.is_allowed("client_B")
+    limiter.is_allowed("client_C")
+    assert len(limiter._records) == 3
+
+    # Ajout d'un 4ème client -> doit évincer le plus ancien sans crasher
+    limiter.is_allowed("client_D")
+    assert len(limiter._records) <= 3
+    assert "client_D" in limiter._records
+
+
+def test_critical_audit_failure_behavior(monkeypatch):
+    """Vérifie que les opérations critiques échouent de façon fail-safe si l'audit échoue."""
+    from dgai.safety.audit import CriticalAuditFailureException
+    import dgai.safety.audit
+
+    def broken_log(*args, **kwargs):
+        raise IOError("Disque plein ou indisponible")
+
+    monkeypatch.setattr(dgai.safety.audit.audit_logger, "warning", broken_log)
+
+    with pytest.raises(CriticalAuditFailureException):
+        log_security_event(
+            event_type=SecurityEventType.ACCESS_DENIED,
+            client_ip="1.2.3.4",
+            endpoint="/admin",
+            critical=True
+        )

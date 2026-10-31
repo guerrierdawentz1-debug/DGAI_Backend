@@ -28,6 +28,11 @@ class SecurityEventType(str, Enum):
 import uuid
 
 
+class CriticalAuditFailureException(Exception):
+    """Exception levée lorsqu'un événement de sécurité critique ne peut pas être consigné."""
+    pass
+
+
 def log_security_event(
     event_type: SecurityEventType,
     client_ip: str,
@@ -35,6 +40,7 @@ def log_security_event(
     actor: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
     correlation_id: Optional[str] = None,
+    critical: bool = False,
     level: str = "WARNING"
 ) -> Dict[str, Any]:
     """
@@ -68,7 +74,11 @@ def log_security_event(
         )
         return audit_entry
     except Exception as e:
-        # En cas d'erreur de journalisation, ne pas faire crasher le système principal
         import sys
         sys.stderr.write(f"[DGAI AUDIT CRITICAL ERROR] Échec d'écriture de l'audit: {str(e)}\n")
+        # Si l'opération est marquée comme critique, bloquer l'action (Fail-Safe)
+        if critical:
+            raise CriticalAuditFailureException(
+                f"L'opération de sécurité critique a été interrompue car l'audit n'a pas pu être consigné: {str(e)}"
+            ) from e
         return {}

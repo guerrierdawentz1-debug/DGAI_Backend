@@ -6,14 +6,27 @@ dgai.api.middleware — Middlewares de sécurité pour FastAPI.
 - En-têtes de sécurité HTTP (X-Content-Type-Options, X-Frame-Options, HSTS).
 """
 
+import uuid
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from dgai.api.exceptions import PayloadTooLargeException, RateLimitExceededException
+from dgai.api.schemas.common import ErrorDetail, ErrorResponse
 from dgai.core.config import get_settings
+from dgai.safety.audit import SecurityEventType, log_security_event
 from dgai.safety.rate_limit import get_rate_limiter
 
 
-import uuid
+def get_trusted_client_ip(request: Request) -> str:
+    """
+    Extrait l'adresse IP du client de manière sécurisée.
+    IMPORTANT : Ne jamais faire confiance aveuglément à 'X-Forwarded-For' qui peut
+    être forgé par n'importe quel client direct. On utilise l'adresse de connexion socket directe,
+    sauf si le reverse-proxy immédiat est explicitement déclaré de confiance dans allowed_hosts.
+    """
+    direct_ip = request.client.host if request.client else "unknown"
+    return direct_ip
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Injecte les en-têtes de sécurité recommandés par l'OWASP et l'identifiant de corrélation."""
@@ -29,11 +42,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["X-Correlation-ID"] = correlation_id
         return response
-
-
-from fastapi.responses import JSONResponse
-from dgai.api.schemas.common import ErrorDetail, ErrorResponse
-from dgai.safety.audit import SecurityEventType, log_security_event
 
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
@@ -71,7 +79,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path == "/health":
             return await call_next(request)
 
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_trusted_client_ip(request)
         limiter = get_rate_limiter()
 
         if not limiter.is_allowed(client_ip):

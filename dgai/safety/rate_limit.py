@@ -87,6 +87,12 @@ class InMemoryRateLimiter(BaseRateLimiter):
         with self._lock:
             self._cleanup_expired(now)
 
+            # Si le dictionnaire atteint sa capacité maximale (attaque par déni de service de clés),
+            # évincer la clé la plus ancienne pour empêcher la saturation RAM
+            if identifier not in self._records and len(self._records) >= self.MAX_TRACKED_IDENTIFIERS:
+                oldest_key = min(self._records.keys(), key=lambda k: self._records[k][-1] if self._records[k] else 0)
+                del self._records[oldest_key]
+
             timestamps = self._records[identifier]
             valid_timestamps = [t for t in timestamps if t > window_start]
             self._records[identifier] = valid_timestamps
