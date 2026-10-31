@@ -6,12 +6,17 @@ DGAI met en œuvre le principe de défense en profondeur à tous les niveaux de 
 
 ---
 
-## 1. Authentification & Jetons (JWT)
+## 1. Authentification & Jetons (JWT via PyJWT)
 
-- **Algorithme de Signature** : `HS256` par défaut (clé secrète configurable via `DGAI_SECRET_KEY`).
-- **Protection en Production** : La configuration DGAI interdit formellement de démarrer en mode `production` avec la clé de développement par défaut.
-- **Expiration** : Durée de vie configurable (`DGAI_JWT_ACCESS_TOKEN_EXPIRE_MINUTES`). Les jetons expirés ou dont la signature est corrompue sont immédiatement rejetés avec un code `401 Unauthorized`.
-- **Hachage des Mots de Passe** : Bcrypt direct avec coût de salage dynamique (`rounds=12`).
+- **Moteur JWT** : Migration complète vers **PyJWT >= 2.8.0** avec élimination de `python-jose` et `ecdsa` (résolution des vulnérabilités CVE-2024-33663 et timing attacks).
+- **Algorithme de Signature Imposé** : Strictement **`HS256`**. Tout jeton spécifiant un autre algorithme (notamment `none`, `HS384`, `RS256`) est immédiatement rejeté avant tout décodage.
+- **Vérifications Temporelles** :
+  - **Expiration obligatoire (`exp`)** : Les jetons sans date d'expiration sont refusés.
+  - **Date d'émission obligatoire (`iat`)** : Les dates futures au-delà de 60 secondes (clock skew) sont refusées.
+  - **Plafond maximal de durée de vie** : Strictement borné à 24 heures (86 400 secondes).
+- **Protection de la Clé Secrète** : En environnement de production, la clé secrète doit obligatoirement comporter au moins 32 caractères aléatoires sous peine d'échec au démarrage.
+- **Invalidation et Transition** : La migration de python-jose vers PyJWT maintient la compatibilité cryptographique HMAC-SHA256 standard, mais toute rotation de clé secrète ou modification de signature invalidera les jetons existants et exigera une ré-authentification.
+- **Hachage des Mots de Passe** : Bcrypt natif avec coût de salage dynamique (`rounds=12`).
 
 ---
 

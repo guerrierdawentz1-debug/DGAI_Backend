@@ -2,7 +2,7 @@
 Tests pour l'authentification, les jetons JWT et le contrôle des permissions RBAC.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 from dgai.api.app import app
@@ -41,10 +41,15 @@ def test_admin_role_rejection_for_unauthorized_client():
 
 def test_expired_token_rejection():
     """Vérifie qu'un jeton expiré est rejeté avec un code HTTP 401."""
-    expired_token = create_access_token(
-        subject="test_user",
-        expires_delta=timedelta(seconds=-10)
-    )
+    # Créer un jeton émis il y a 200 secondes et expiré il y a 100 secondes (iat < exp < now)
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    settings = app.state if hasattr(app, "state") else None
+    from dgai.core.config import get_settings
+    s = get_settings()
+    import jwt
+    payload = {"sub": "test_user", "role": "user", "iat": now_ts - 200, "exp": now_ts - 100}
+    expired_token = jwt.encode(payload, s.secret_key, algorithm="HS256")
+
     headers = {"Authorization": f"Bearer {expired_token}"}
     response = client.get("/api/v1/system/info", headers=headers)
     assert response.status_code == 401

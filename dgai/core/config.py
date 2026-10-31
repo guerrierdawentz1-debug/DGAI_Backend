@@ -119,7 +119,7 @@ class DGAISettings(BaseSettings):
     # JWT Tokens
     jwt_algorithm: str = Field(
         default="HS256",
-        description="Algorithme de signature des jetons JWT (doit être HMAC sécurisé)"
+        description="Algorithme de signature des jetons JWT (strictement limité à HS256)"
     )
     jwt_access_token_expire_minutes: int = Field(
         default=60,
@@ -172,9 +172,10 @@ class DGAISettings(BaseSettings):
     @field_validator("jwt_algorithm")
     @classmethod
     def validate_jwt_algorithm(cls, v: str) -> str:
-        secure_algorithms = {"HS256", "HS384", "HS512"}
+        # Restriction stricte à HS256 comme exigé pour éliminer toute confusion d'algorithme
+        secure_algorithms = {"HS256"}
         if v.upper() not in secure_algorithms:
-            raise ValueError(f"Algorithme JWT non sécurisé ou non supporté : '{v}'. Algorithmes autorisés : {secure_algorithms}")
+            raise ValueError(f"Algorithme JWT non autorisé : '{v}'. L'algorithme imposé est strictement : {secure_algorithms}")
         return v.upper()
 
     @field_validator("secret_key")

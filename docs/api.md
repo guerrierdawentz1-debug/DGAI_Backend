@@ -7,7 +7,7 @@ L'API DGAI est construite avec **FastAPI** et **Pydantic v2**. Elle implémente 
 - En-têtes de sécurité conformes aux recommandations OWASP.
 - Limitation de taille de corps de requête (`max_request_size_bytes`).
 - Limitation de débit de requêtes par IP (`rate_limit_requests_per_minute`).
-- Authentification par jetons signés JWT (HS256) avec contrôle d'accès basé sur les rôles (RBAC).
+- Authentification par jetons signés JWT via **PyJWT** (strictement HS256) avec contrôle d'accès basé sur les rôles (RBAC).
 - Assainissement des données d'audit avec caviardage automatique des PII et des clés secrètes.
 
 ---
