@@ -83,3 +83,21 @@ def test_settings_singleton_and_reset():
     assert get_settings().app_name == "DGAI Custom Test"
 
     reset_settings()
+
+
+def test_invalid_port_range():
+    """Vérifie que les ports hors bornes (ex: 0, 70000) sont rejetés."""
+    with pytest.raises(ValidationError):
+        DGAISettings(port=0)
+
+    with pytest.raises(ValidationError):
+        DGAISettings(port=70000)
+
+
+def test_invalid_sandbox_quotas():
+    """Vérifie que des quotas de sandbox absurdes ou négatifs sont rejetés."""
+    with pytest.raises(ValidationError):
+        DGAISettings(sandbox_timeout_seconds=0.0)
+
+    with pytest.raises(ValidationError):
+        DGAISettings(sandbox_max_memory_mb=16)  # Minimum fixé à 64MB

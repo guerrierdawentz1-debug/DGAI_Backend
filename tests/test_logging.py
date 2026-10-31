@@ -57,3 +57,40 @@ def test_get_logger_naming():
 
     l2 = get_logger("dgai.llm")
     assert l2.name == "dgai.llm"
+
+
+def test_structured_json_formatter_with_exception():
+    """Vérifie que le formateur JSON capture et sérialise proprement une exception."""
+    formatter = StructuredJsonFormatter()
+    try:
+        raise ValueError("Erreur simulée de test")
+    except ValueError:
+        import sys
+        record = logging.LogRecord(
+            name="dgai.error_test",
+            level=logging.ERROR,
+            pathname="test_file.py",
+            lineno=99,
+            msg="Une panne s'est produite",
+            args=(),
+            exc_info=sys.exc_info(),
+        )
+
+    formatted_str = formatter.format(record)
+    parsed = json.loads(formatted_str)
+
+    assert parsed["level"] == "ERROR"
+    assert "exception" in parsed
+    assert "ValueError: Erreur simulée de test" in parsed["exception"]
+
+
+def test_setup_logging_text_format():
+    """Vérifie la configuration avec un formateur texte standard."""
+    stream = io.StringIO()
+    logger = setup_logging(level="INFO", log_format=LogFormat.TEXT)
+    logger.handlers[0].stream = stream
+    logger.info("Message format texte")
+
+    output = stream.getvalue().strip()
+    assert "[INFO]" in output
+    assert "Message format texte" in output
