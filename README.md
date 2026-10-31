@@ -83,8 +83,8 @@ docker run --rm -p 8000:8000 dgai:latest
 
 - [x] **Phase 1 : Fondations, Configuration & Journalisation**
 - [x] **Phase 2 : Sécurité & API Centrale (FastAPI, RBAC, Rate Limiting, Audit)**
-- [ ] **Phase 3 : Moteur LLM Indépendant & Modèles**
-- [ ] **Phase 4 : Contexte & Raisonnement**
+- [x] **Phase 3 : Moteur Central Intelligent (LLMEngine, ModelRegistry, BrainRouter, Mock Provider de test)**
+- [ ] **Phase 4 : Contexte & Raisonnement Avancé**
 - [ ] **Phase 5 : Mémoire & RAG**
 - [ ] **Phase 6 : Recherche Web Multi-fournisseurs**
 - [ ] **Phase 7 : Agents Autonomes & Outils**

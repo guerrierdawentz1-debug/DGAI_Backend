@@ -142,6 +142,50 @@ class DGAISettings(BaseSettings):
         description="Nombre maximum de requêtes par minute par IP/client"
     )
 
+    # Moteur LLM & Inférence (Phase 3)
+    default_llm_engine: str = Field(
+        default="none",
+        description="Moteur d'exécution LLM par défaut (none, mock, llama_cpp, vllm, transformers)"
+    )
+    default_model_id: str = Field(
+        default="",
+        description="Identifiant du modèle par défaut dans le registre"
+    )
+    max_generation_tokens: int = Field(
+        default=2048,
+        ge=1,
+        le=131072,
+        description="Nombre maximal absolu de tokens générables par requête"
+    )
+    default_temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Température par défaut pour le sampling"
+    )
+    llm_generation_timeout_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        le=600.0,
+        description="Délai d'attente maximal en secondes pour une génération LLM"
+    )
+    llm_max_concurrent_requests: int = Field(
+        default=10,
+        ge=1,
+        le=1000,
+        description="Nombre maximal de requêtes d'inférence exécutées simultanément"
+    )
+    allow_mock_provider: bool = Field(
+        default=True,
+        description="Autorise le fournisseur Mock (strictement réservé aux tests et au développement)"
+    )
+    max_prompt_length_chars: int = Field(
+        default=32768,
+        ge=10,
+        le=500000,
+        description="Longueur maximale en caractères pour le texte d'entrée (prompt)"
+    )
+
     # Sandbox & Sécurité d'exécution
     sandbox_timeout_seconds: float = Field(
         default=5.0,
@@ -189,6 +233,14 @@ class DGAISettings(BaseSettings):
                 )
             if len(v) < 32:
                 raise ValueError("En environnement de PRODUCTION, la clé secrète doit comporter au moins 32 caractères.")
+        return v
+
+    @field_validator("allow_mock_provider")
+    @classmethod
+    def validate_mock_in_production(cls, v: bool, info) -> bool:
+        env = info.data.get("environment")
+        if env == EnvironmentType.PRODUCTION and v is True:
+            raise ValueError("Le fournisseur Mock ne peut pas être autorisé en environnement de PRODUCTION.")
         return v
 
 

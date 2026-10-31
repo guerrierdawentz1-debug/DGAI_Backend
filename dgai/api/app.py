@@ -72,7 +72,21 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    from fastapi import HTTPException
+    from fastapi.responses import JSONResponse
+    from dgai.api.schemas.common import ErrorDetail, ErrorResponse
+
+    async def http_exception_handler(request, exc: HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=ErrorResponse(
+                error=str(exc.detail),
+                details=[ErrorDetail(code=f"HTTP_{exc.status_code}", message=str(exc.detail))]
+            ).model_dump()
+        )
+
     # 3. Gestionnaires d'exceptions centralisés
+    app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(DGAIAPIException, dgai_api_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, generic_exception_handler)

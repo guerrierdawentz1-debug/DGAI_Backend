@@ -2,7 +2,7 @@
 
 ## Principes Directeurs
 
-1. **Indépendance du Cerveau** : DGAI ne dépend pas obligatoirement d'une API externe. Le cerveau LLM est encapsulé par une interface abstraite permettant le chargement de modèles open-weight locaux (Mistral, Llama, Qwen).
+1. **Indépendance du Cerveau** : DGAI ne dépend pas obligatoirement d'une API externe. Le cerveau LLM est encapsulé par une interface abstraite permettant le chargement de modèles open-weight locaux (Mistral, Llama, Qwen). Le `ModelRegistry` maintient un inventaire transparent et le `BrainRouter` sélectionne le modèle selon ses capacités attestées.
 2. **Modularité Découplée** : Chaque module (`core`, `llm`, `reasoning`, `memory`, `rag`, `websearch`, `agents`, `sandbox`, `domains`, `safety`, `evaluation`) possède des frontières nettes.
 3. **Sécurité en Profondeur** :
    - Isolation stricte des bacs à sable (utilisateur non-root, réseau coupé par défaut, quotas stricts).

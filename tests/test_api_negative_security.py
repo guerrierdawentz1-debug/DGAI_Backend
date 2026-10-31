@@ -161,7 +161,8 @@ def test_production_secret_key_minimum_length():
     with pytest.raises(ValidationError):
         DGAISettings(
             environment=EnvironmentType.PRODUCTION,
-            secret_key="court_secret_inferieur_32"
+            secret_key="court_secret_inferieur_32",
+            allow_mock_provider=False
         )
 
 

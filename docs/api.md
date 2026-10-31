@@ -65,24 +65,30 @@ L'API DGAI est construite avec **FastAPI** et **Pydantic v2**. Elle implémente 
 - **`GET /api/v1/system/info`**
   - **Accès** : Protégé (Nécessite le header `Authorization: Bearer <token>` avec permission `read:system_info`).
   - **Description** : Retourne les caractéristiques non sensibles de l'instance DGAI en cours d'exécution.
-  - **Exemple de réponse** :
+
+---
+
+### 4. Inférence et Chat (Phase 3)
+
+- **`POST /api/v1/chat`**
+  - **Accès** : Protégé (Nécessite le header `Authorization: Bearer <token>` avec permission `execute:inference`).
+  - **Corps de requête** :
     ```json
     {
-      "success": true,
-      "message": "Informations système récupérées avec succès.",
-      "data": {
-        "app_name": "DGAI Core",
-        "version": "0.1.0",
-        "environment": "development",
-        "python_version": "3.12.13",
-        "api_prefix": "/api/v1",
-        "docs_enabled": true,
-        "active_features": [
-          "Phase 1: Foundations",
-          "Phase 2: Security & API Gateway"
-        ],
-        "rate_limit_per_minute": 60
-      },
+      "messages": [
+        {"role": "user", "content": "Explique-moi les principes de DGAI."}
+      ],
+      "model_id": "optional-target-model-id",
+      "temperature": 0.7,
+      "max_tokens": 512
+    }
+    ```
+  - **Statut si aucun modèle réel n'est chargé** : Retourne `HTTP 503 Service Unavailable` :
+    ```json
+    {
+      "success": false,
+      "error": "Le moteur IA de DGAI n'est pas encore opérationnel : aucun modèle n'est disponible ou chargé.",
+      "details": [{"code": "HTTP_503", "message": "..."}],
       "timestamp": "..."
     }
     ```
@@ -91,9 +97,8 @@ L'API DGAI est construite avec **FastAPI** et **Pydantic v2**. Elle implémente 
 
 ## Fonctionnalités Non Encore Implémentées (Réservées aux phases ultérieures)
 
-Les routes suivantes **ne sont pas encore implémentées** et ne doivent pas être appelées avant leurs phases respectives :
-- Inférence LLM (`/api/v1/predict`, `/api/v1/chat`) -> Réservé à la Phase 3.
-- Raisonnement & Planification (`/api/v1/reasoning`) -> Réservé à la Phase 4.
+Les modules suivants **ne sont pas encore implémentés** et ne doivent pas être appelés avant leurs phases respectives :
+- Raisonnement avancé & Planification multi-étapes (`dgai/reasoning/planner.py`) -> Réservé à la Phase 4.
 - Mémoire & Recherche documentaire (`/api/v1/memory`, `/api/v1/rag`) -> Réservé à la Phase 5.
 - Recherche Web (`/api/v1/search`) -> Réservé à la Phase 6.
 - Agents & Sandbox (`/api/v1/agents`, `/api/v1/tools`) -> Réservé aux Phases 7 et 8.

@@ -62,13 +62,15 @@ def test_production_secret_key_rejection():
 
 
 def test_production_with_secure_secret():
-    """Vérifie qu'une clé personnalisée en production est autorisée."""
+    """Vérifie qu'une clé personnalisée en production est autorisée (avec allow_mock_provider=False)."""
     settings = DGAISettings(
         environment=EnvironmentType.PRODUCTION,
-        secret_key="super_secure_production_secret_key_123"
+        secret_key="super_secure_production_secret_key_123",
+        allow_mock_provider=False
     )
     assert settings.environment == EnvironmentType.PRODUCTION
     assert settings.secret_key == "super_secure_production_secret_key_123"
+    assert settings.allow_mock_provider is False
 
 
 def test_settings_singleton_and_reset():
