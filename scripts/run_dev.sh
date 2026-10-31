@@ -15,4 +15,4 @@ else
     cp .env.example .env
 fi
 
-python3 -c "from dgai.core.config import get_settings; from dgai.core.logging import setup_logging; setup_logging(); s = get_settings(); print(f'DGAI prêt en mode {s.environment.value} sur {s.host}:{s.port}')"
+python3 main.py

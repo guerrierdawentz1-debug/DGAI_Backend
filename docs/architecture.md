@@ -9,6 +9,7 @@
    - Protection anti-SSRF et anti-DNS rebinding pour la recherche web.
    - Défense contre les injections de prompt directes et indirectes.
    - Caviardage automatique des PII et des clés secrètes.
+   - Contrôle d'accès basé sur les rôles (RBAC) et limitation de débit (Rate Limiting).
 4. **4 Niveaux de Mémoire** :
    - *Short-Term Memory* : Fenêtre de contexte conversationnelle immédiate.
    - *Working Memory* : État d'exécution de l'agent en cours.

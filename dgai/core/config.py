@@ -93,7 +93,7 @@ class DGAISettings(BaseSettings):
         description="Répertoire des sauvegardes de checkpoints"
     )
 
-    # Sécurité
+    # Sécurité & Authentification (Phase 2)
     secret_key: str = Field(
         default="dgai-insecure-default-development-key",
         description="Clé secrète pour les signatures et jetons"
@@ -101,6 +101,44 @@ class DGAISettings(BaseSettings):
     allowed_hosts: List[str] = Field(
         default_factory=lambda: ["127.0.0.1", "localhost"],
         description="Hôtes autorisés pour les requêtes entrantes"
+    )
+    cors_allowed_origins: List[str] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
+        description="Liste des origines CORS autorisées"
+    )
+    enable_docs: bool = Field(
+        default=True,
+        description="Active ou désactive la documentation Swagger/OpenAPI"
+    )
+    api_prefix: str = Field(
+        default="/api/v1",
+        description="Préfixe d'URL de l'API v1"
+    )
+
+    # JWT Tokens
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description="Algorithme de signature des jetons JWT"
+    )
+    jwt_access_token_expire_minutes: int = Field(
+        default=60,
+        ge=1,
+        le=43200,
+        description="Durée de validité des jetons d'accès en minutes"
+    )
+
+    # Protection des requêtes & Rate Limiting
+    max_request_size_bytes: int = Field(
+        default=2 * 1024 * 1024,  # 2 MB par défaut
+        ge=1024,
+        le=50 * 1024 * 1024,
+        description="Taille maximale autorisée pour le corps de la requête en octets"
+    )
+    rate_limit_requests_per_minute: int = Field(
+        default=60,
+        ge=1,
+        le=10000,
+        description="Nombre maximum de requêtes par minute par IP/client"
     )
 
     # Sandbox & Sécurité d'exécution

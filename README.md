@@ -82,7 +82,7 @@ docker run --rm -p 8000:8000 dgai:latest
 ## Feuille de Route de Construction
 
 - [x] **Phase 1 : Fondations, Configuration & Journalisation**
-- [ ] **Phase 2 : Sécurité & API**
+- [x] **Phase 2 : Sécurité & API Centrale (FastAPI, RBAC, Rate Limiting, Audit)**
 - [ ] **Phase 3 : Moteur LLM Indépendant & Modèles**
 - [ ] **Phase 4 : Contexte & Raisonnement**
 - [ ] **Phase 5 : Mémoire & RAG**
