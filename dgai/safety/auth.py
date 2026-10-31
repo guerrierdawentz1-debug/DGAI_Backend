@@ -86,18 +86,28 @@ def create_access_token(
 def decode_access_token(token: str) -> TokenData:
     """
     Décode, vérifie la signature et la validité temporelle d'un jeton JWT.
-    Lève ValueError si le jeton est invalide ou expiré.
+    - Exige impérativement une date d'expiration ('exp') et de création ('iat').
+    - Interdit l'algorithme non sécurisé 'none'.
+    - Lève ValueError si le jeton est invalide, expiré ou sans signature valide.
     """
     settings = get_settings()
     try:
+        # Rejeter explicitement l'algorithme "none"
+        unverified_headers = jwt.get_unverified_header(token)
+        alg = unverified_headers.get("alg")
+        if not alg or alg.lower() == "none" or alg != settings.jwt_algorithm:
+            raise ValueError(f"Algorithme de jeton non autorisé ou discordant : '{alg}'")
+
         payload = jwt.decode(
             token,
             settings.secret_key,
-            algorithms=[settings.jwt_algorithm]
+            algorithms=[settings.jwt_algorithm],
+            options={"verify_exp": True, "require_exp": True, "require_iat": True}
         )
+
         subject: str = payload.get("sub")
-        if subject is None:
-            raise ValueError("Le jeton ne contient pas de champ 'sub' valide.")
+        if not subject or not isinstance(subject, str) or not subject.strip():
+            raise ValueError("Le jeton ne contient pas d'identifiant sujet ('sub') valide.")
 
         role_str: str = payload.get("role", Role.USER.value)
         try:
@@ -106,6 +116,14 @@ def decode_access_token(token: str) -> TokenData:
             role = Role.USER
 
         exp: Optional[int] = payload.get("exp")
+        if exp is None:
+            raise ValueError("Le jeton doit obligatoirement comporter un champ d'expiration ('exp').")
+
+        # Vérifier que iat <= exp
+        iat: Optional[int] = payload.get("iat")
+        if iat is not None and exp < iat:
+            raise ValueError("Le jeton comporte une date d'expiration antérieure à sa date d'émission.")
+
         return TokenData(sub=subject, role=role, exp=exp)
 
     except JWTError as e:

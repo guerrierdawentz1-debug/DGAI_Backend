@@ -96,7 +96,8 @@ class DGAISettings(BaseSettings):
     # Sécurité & Authentification (Phase 2)
     secret_key: str = Field(
         default="dgai-insecure-default-development-key",
-        description="Clé secrète pour les signatures et jetons"
+        min_length=16,
+        description="Clé secrète pour les signatures et jetons (longueur minimale 16 caractères en dev, 32 en prod)"
     )
     allowed_hosts: List[str] = Field(
         default_factory=lambda: ["127.0.0.1", "localhost"],
@@ -118,7 +119,7 @@ class DGAISettings(BaseSettings):
     # JWT Tokens
     jwt_algorithm: str = Field(
         default="HS256",
-        description="Algorithme de signature des jetons JWT"
+        description="Algorithme de signature des jetons JWT (doit être HMAC sécurisé)"
     )
     jwt_access_token_expire_minutes: int = Field(
         default=60,
@@ -168,14 +169,25 @@ class DGAISettings(BaseSettings):
             raise ValueError(f"Niveau de log invalide: '{v}'. Niveaux valides: {valid_levels}")
         return upper_v
 
+    @field_validator("jwt_algorithm")
+    @classmethod
+    def validate_jwt_algorithm(cls, v: str) -> str:
+        secure_algorithms = {"HS256", "HS384", "HS512"}
+        if v.upper() not in secure_algorithms:
+            raise ValueError(f"Algorithme JWT non sécurisé ou non supporté : '{v}'. Algorithmes autorisés : {secure_algorithms}")
+        return v.upper()
+
     @field_validator("secret_key")
     @classmethod
     def validate_production_secret(cls, v: str, info) -> str:
         env = info.data.get("environment")
-        if env == EnvironmentType.PRODUCTION and v == "dgai-insecure-default-development-key":
-            raise ValueError(
-                "La clé secrète par défaut ne peut PAS être utilisée dans un environnement de PRODUCTION."
-            )
+        if env == EnvironmentType.PRODUCTION:
+            if v == "dgai-insecure-default-development-key":
+                raise ValueError(
+                    "La clé secrète par défaut ne peut PAS être utilisée dans un environnement de PRODUCTION."
+                )
+            if len(v) < 32:
+                raise ValueError("En environnement de PRODUCTION, la clé secrète doit comporter au moins 32 caractères.")
         return v
 
 
