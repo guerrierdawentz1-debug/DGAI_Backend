@@ -15,6 +15,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Requête de chat transmise à l'endpoint /api/v1/chat."""
     messages: List[ChatMessage] = Field(min_length=1, description="Historique ou liste des messages")
+    conversation_id: Optional[str] = Field(default=None, description="Identifiant d'une conversation persistée existante")
     model_id: Optional[str] = Field(default=None, description="Modèle souhaité (optionnel, sélectionné par BrainRouter si omis)")
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0, description="Température")
     max_tokens: Optional[int] = Field(default=None, ge=1, le=8192, description="Tokens max")

@@ -46,6 +46,7 @@ ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
         Permission.EXECUTE_INFERENCE,
         Permission.READ_MEMORY,
         Permission.WRITE_MEMORY,
+        Permission.DELETE_MEMORY,
     },
     Role.AGENT: {
         Permission.READ_HEALTH,

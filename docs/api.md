@@ -95,10 +95,25 @@ L'API DGAI est construite avec **FastAPI** et **Pydantic v2**. Elle implémente 
 
 ---
 
+### 5. Gestion des Conversations & Mémoires (Phase 4)
+
+- **`POST /api/v1/conversations`** : Crée une nouvelle conversation.
+- **`GET /api/v1/conversations`** : Liste les conversations du client.
+- **`GET /api/v1/conversations/{id}`** : Récupère le détail d'une conversation (404 si non propriétaire).
+- **`DELETE /api/v1/conversations/{id}`** : Supprime la conversation et son historique par cascade.
+- **`GET /api/v1/conversations/{id}/messages`** : Récupère les messages d'une conversation.
+- **`POST /api/v1/memories`** : Enregistre un fait/préférence à long terme (rejet des mots de passe/secrets).
+- **`GET /api/v1/memories`** : Liste les mémoires durables actives.
+- **`GET /api/v1/memories/{id}`** : Détail d'une mémoire.
+- **`PATCH /api/v1/memories/{id}`** : Mise à jour d'une mémoire.
+- **`DELETE /api/v1/memories/{id}`** : Suppression physique définitive d'une mémoire.
+
+---
+
 ## Fonctionnalités Non Encore Implémentées (Réservées aux phases ultérieures)
 
 Les modules suivants **ne sont pas encore implémentés** et ne doivent pas être appelés avant leurs phases respectives :
-- Raisonnement avancé & Planification multi-étapes (`dgai/reasoning/planner.py`) -> Réservé à la Phase 4.
-- Mémoire & Recherche documentaire (`/api/v1/memory`, `/api/v1/rag`) -> Réservé à la Phase 5.
-- Recherche Web (`/api/v1/search`) -> Réservé à la Phase 6.
-- Agents & Sandbox (`/api/v1/agents`, `/api/v1/tools`) -> Réservé aux Phases 7 et 8.
+- Recherche documentaire vectorielle & RAG avancé -> Réservé à la Phase 5.
+- Recherche Web multi-fournisseurs -> Réservé à la Phase 6.
+- Agents autonomes & Outils -> Réservé à la Phase 7.
+- Sandbox d'exécution sécurisée -> Réservé à la Phase 8.

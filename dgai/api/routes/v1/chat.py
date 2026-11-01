@@ -64,7 +64,33 @@ async def create_chat_completion(
                 detail="Le moteur IA de DGAI n'est pas encore opérationnel : aucun modèle n'est disponible ou chargé."
             )
 
-    # 3. Préparation de la requête de génération
+    # 3. Récupération optionnelle du contexte de mémoire et persistance
+    from dgai.memory.manager import get_memory_manager
+    from dgai.reasoning.context import ContextManager
+    mem_mgr = get_memory_manager()
+    ctx_mgr = ContextManager()
+
+    effective_prompt = last_user_message
+    if request_body.conversation_id:
+        try:
+            # Récupérer l'historique et les mémoires de l'utilisateur
+            history_msgs = mem_mgr.conversations.get_recent_messages(token_data.sub, request_body.conversation_id)
+            memories = mem_mgr.retriever.retrieve_relevant_memories(token_data.sub, last_user_message)
+            summary = mem_mgr.storage.get_summary(token_data.sub, request_body.conversation_id)
+
+            ctx_res = ctx_mgr.assemble_context(
+                new_prompt=last_user_message,
+                messages=history_msgs,
+                memories=memories,
+                summary=summary
+            )
+            effective_prompt = ctx_res.formatted_context
+            # Enregistrer le message de l'utilisateur
+            mem_mgr.conversations.add_message(token_data.sub, request_body.conversation_id, "user", last_user_message)
+        except Exception as e:
+            logger.warning(f"Erreur lors de l'intégration du contexte mémoire : {str(e)}")
+
+    # 4. Préparation de la requête de génération
     generation_params = GenerationParams(
         temperature=request_body.temperature or settings.default_temperature,
         max_tokens=request_body.max_tokens or settings.max_generation_tokens,
@@ -72,14 +98,21 @@ async def create_chat_completion(
     )
 
     gen_req = GenerationRequest(
-        prompt=last_user_message,
+        prompt=effective_prompt,
         model_id=target_model_id,
         params=generation_params
     )
 
-    # 4. Appel du moteur central avec gestion typée des erreurs
+    # 5. Appel du moteur central avec gestion typée des erreurs
     try:
         gen_res = await llm_engine.generate(gen_req)
+
+        # Si rattaché à une conversation, persister la réponse de l'assistant
+        if request_body.conversation_id:
+            try:
+                mem_mgr.conversations.add_message(token_data.sub, request_body.conversation_id, "assistant", gen_res.text)
+            except Exception as e:
+                logger.warning(f"Échec d'enregistrement de la réponse assistant : {str(e)}")
 
         chat_resp = ChatResponse(
             id=f"chatcmpl-{uuid.uuid4().hex[:12]}",

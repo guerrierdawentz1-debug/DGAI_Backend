@@ -84,8 +84,8 @@ docker run --rm -p 8000:8000 dgai:latest
 - [x] **Phase 1 : Fondations, Configuration & Journalisation**
 - [x] **Phase 2 : Sécurité & API Centrale (FastAPI, RBAC, Rate Limiting, Audit)**
 - [x] **Phase 3 : Moteur Central Intelligent (LLMEngine, ModelRegistry, BrainRouter, Mock Provider de test)**
-- [ ] **Phase 4 : Contexte & Raisonnement Avancé**
-- [ ] **Phase 5 : Mémoire & RAG**
+- [x] **Phase 4 : Système de Mémoire Multi-Couches et Gestion du Contexte (Short-Term, Long-Term, Sessions, SQLite, ContextManager)**
+- [ ] **Phase 5 : Mémoire & RAG Documentaire Avancé**
 - [ ] **Phase 6 : Recherche Web Multi-fournisseurs**
 - [ ] **Phase 7 : Agents Autonomes & Outils**
 - [ ] **Phase 8 : Sandbox Sécurisée**

@@ -142,6 +142,60 @@ class DGAISettings(BaseSettings):
         description="Nombre maximum de requêtes par minute par IP/client"
     )
 
+    # Mémoire & Contexte (Phase 4)
+    memory_enabled: bool = Field(
+        default=True,
+        description="Active ou désactive la mémoire conversationnelle et persistante"
+    )
+    long_term_memory_enabled: bool = Field(
+        default=True,
+        description="Active ou désactive la mémoire à long terme (persistance inter-conversations)"
+    )
+    memory_storage_backend: str = Field(
+        default="sqlite",
+        description="Backend de stockage mémoire (sqlite, memory)"
+    )
+    sqlite_memory_db_path: Path = Field(
+        default=Path("./data/dgai_memory.db"),
+        description="Chemin local du fichier SQLite de mémoire"
+    )
+    max_history_messages: int = Field(
+        default=20,
+        ge=1,
+        le=500,
+        description="Nombre maximal de messages récents injectés dans le contexte"
+    )
+    max_retrieved_memories: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Nombre maximal de souvenirs à long terme récupérés par requête"
+    )
+    max_memory_content_chars: int = Field(
+        default=2000,
+        ge=10,
+        le=50000,
+        description="Longueur maximale en caractères pour un contenu de mémoire"
+    )
+    memory_retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=3650,
+        description="Durée de rétention par défaut des mémoires en jours (0 = infini)"
+    )
+    auto_summarize_threshold_messages: int = Field(
+        default=12,
+        ge=4,
+        le=200,
+        description="Nombre de messages déclenchant une proposition de résumé de conversation"
+    )
+    context_reserve_tokens: int = Field(
+        default=512,
+        ge=64,
+        le=8192,
+        description="Tokens réservés pour la réponse du modèle dans la fenêtre de contexte"
+    )
+
     # Moteur LLM & Inférence (Phase 3)
     default_llm_engine: str = Field(
         default="none",
